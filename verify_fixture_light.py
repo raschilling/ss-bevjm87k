@@ -5,7 +5,6 @@ from playwright.async_api import async_playwright
 BASE = os.environ.get("SS_BASE", "http://127.0.0.1:8770/index.html")
 OUT = Path(os.environ.get("SS_OUT", "/workspace/switch-survey/verify/fixture-light"))
 OUT.mkdir(parents=True, exist_ok=True)
-PIN = os.environ.get("SS_TEST_PIN", "2468")
 WEBKIT = "/home/box/.cache/ms-playwright/webkit-2388/pw_run.sh"
 results = {"ok": True, "base": BASE, "checks": []}
 
@@ -14,17 +13,6 @@ def check(name, cond, detail=""):
     print(("PASS " if cond else "FAIL ") + name + (f" — {detail}" if detail else ""))
     if not cond:
         results["ok"] = False
-
-async def press_pin(page, pin, confirm=False):
-    await page.wait_for_selector("#keypad")
-    for d in pin:
-        await page.click(f'.key[data-key="{d}"]')
-    await page.click('.key[data-key="OK"]')
-    if confirm:
-        await page.wait_for_timeout(80)
-        for d in pin:
-            await page.click(f'.key[data-key="{d}"]')
-        await page.click('.key[data-key="OK"]')
 
 async def shot(page, name):
     path = OUT / name
@@ -97,7 +85,6 @@ async def run():
         check("title", await page.title() == "Switch Survey")
         src = await page.content()
         check("noindex", 'noindex' in src)
-        await press_pin(page, PIN, confirm=True)
         await page.wait_for_selector("[data-tab='walk']")
         body = await page.inner_text("body")
         check("Where the switch is", "Where the switch is" in body)
@@ -230,20 +217,12 @@ async def run():
         check("4-way badge 3 locations", "4-way (3 locations)" in (await page.inner_text("body")))
         await shot(page, "393-dark-four-way-light.png")
 
-        # PIN once after reload (not a second confirm)
+        # Autosave survives reload with no PIN
         await page.reload(wait_until="load")
-        await page.wait_for_selector("#keypad")
-        title = await page.inner_text(".card h2")
-        check("reload is Enter PIN, not Set PIN", "Enter PIN" in title and "Set a PIN" not in title and "Confirm" not in title, title)
-        await press_pin(page, PIN, confirm=False)
-        try:
-            await page.wait_for_selector("[data-tab='walk']", timeout=4000)
-            unlocked = True
-        except Exception as e:
-            unlocked = False
-            title2 = await page.inner_text("body")
-        check("unlock is a single PIN entry", unlocked, title if unlocked else "still locked: " + title2[:300])
-        await shot(page, "393-dark-after-unlock.png")
+        await page.wait_for_selector("[data-tab='walk']", timeout=4000)
+        body = await page.inner_text("body")
+        check("reload has no PIN screen", await page.locator("#keypad").count() == 0 and "Enter PIN" not in body and "Set a PIN" not in body)
+        await shot(page, "393-dark-after-reload.png")
 
         # Light theme + widths
         await page.emulate_media(color_scheme="light")
@@ -265,14 +244,15 @@ async def run():
             await shot(page, f"{label}-light-summary.png")
 
         # clear test data
-        await page.reload(wait_until="load")
-        await page.wait_for_selector("#forgot")
-        await page.click("#forgot")
-        await page.click("#forgotWarn")
-        await page.click("#forgotConfirm")
-        await page.wait_for_timeout(150)
-        has = await page.evaluate("() => localStorage.getItem('switchSurvey.meta.v1')")
-        check("storage cleared", has is None, has)
+        leftovers = await page.evaluate("""() => {
+          localStorage.removeItem('switchSurvey.meta.v1');
+          localStorage.removeItem('switchSurvey.data.v2');
+          return {
+            meta: localStorage.getItem('switchSurvey.meta.v1'),
+            data: localStorage.getItem('switchSurvey.data.v2')
+          };
+        }""")
+        check("storage cleared", leftovers.get("meta") is None and leftovers.get("data") is None, leftovers)
         await ctx.close()
         await browser.close()
 

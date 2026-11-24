@@ -5,7 +5,6 @@ from playwright.async_api import async_playwright
 BASE = os.environ.get("SS_BASE", "http://127.0.0.1:8771/index.html")
 OUT = Path(os.environ.get("SS_OUT", "/workspace/switch-survey/verify/neutrals-autolink"))
 OUT.mkdir(parents=True, exist_ok=True)
-PIN = os.environ.get("SS_TEST_PIN", "2468")
 WEBKIT = "/home/box/.cache/ms-playwright/webkit-2388/pw_run.sh"
 results = {"ok": True, "base": BASE, "checks": []}
 
@@ -14,17 +13,6 @@ def check(name, cond, detail=""):
     print(("PASS " if cond else "FAIL ") + name + (f" — {detail}" if detail else ""))
     if not cond:
         results["ok"] = False
-
-async def press_pin(page, pin, confirm=False):
-    await page.wait_for_selector("#keypad")
-    for d in pin:
-        await page.click(f'.key[data-key="{d}"]')
-    await page.click('.key[data-key="OK"]')
-    if confirm:
-        await page.wait_for_timeout(80)
-        for d in pin:
-            await page.click(f'.key[data-key="{d}"]')
-        await page.click('.key[data-key="OK"]')
 
 async def shot(page, name):
     path = OUT / name
@@ -97,7 +85,6 @@ async def run():
         check("title", await page.title() == "Switch Survey")
         src = await page.content()
         check("noindex", "noindex" in src)
-        await press_pin(page, PIN, confirm=True)
         await page.wait_for_selector("[data-tab='walk']")
 
         # Walk top: no neutrals card, no Also controlled from until More
@@ -272,21 +259,13 @@ async def run():
         check("Fan type shows for ceiling fan", "Fan type" in body)
         check("fixture count hidden for fan", await page.locator("#fixtureOpen").count() == 0 and "Fixtures on this switch" not in (await page.inner_text("body")))
 
-        # Autosave + PIN once
+        # Autosave survives reload with no PIN
         await page.click("#saveSw")
         await page.wait_for_timeout(200)
         await page.reload(wait_until="load")
-        await page.wait_for_selector("#keypad")
-        title = await page.inner_text(".card h2")
-        check("reload is Enter PIN, not Set PIN", "Enter PIN" in title and "Set a PIN" not in title and "Confirm" not in title, title)
-        await press_pin(page, PIN, confirm=False)
-        try:
-            await page.wait_for_selector("[data-tab='walk']", timeout=4000)
-            unlocked = True
-        except Exception:
-            unlocked = False
-            title2 = await page.inner_text("body")
-        check("unlock is a single PIN entry", unlocked, title if unlocked else "still locked: " + title2[:300])
+        await page.wait_for_selector("[data-tab='walk']", timeout=4000)
+        body = await page.inner_text("body")
+        check("reload has no PIN screen", await page.locator("#keypad").count() == 0 and "Enter PIN" not in body and "Set a PIN" not in body)
         await page.click("[data-tab='homes']")
         await page.wait_for_timeout(100)
         body = await page.inner_text("body")
@@ -357,7 +336,7 @@ async def run():
             check(f"{label} dark summary no overflow", ovs)
 
         # unknown -> yes migration via in-page evaluate of migrateHomes by temporarily setting neutrals
-        # We'll go through encrypted persist: use chip Not sure, then call migrate by reloading after
+        # Verify migrate function exists in source:
         # exposing a one-off. Instead, patch the live store if we can by clicking and then evaluate
         # document hook. Skip if we didn't add hook; we can add a tiny evaluate that uses
         # the already-open page after we inject: actually store is in closure.
@@ -366,14 +345,15 @@ async def run():
         check("migrateHomes in app", "function migrateHomes" in src)
 
         # clear
-        await page.reload(wait_until="load")
-        await page.wait_for_selector("#forgot")
-        await page.click("#forgot")
-        await page.click("#forgotWarn")
-        await page.click("#forgotConfirm")
-        await page.wait_for_timeout(150)
-        has = await page.evaluate("() => localStorage.getItem('switchSurvey.meta.v1')")
-        check("storage cleared", has is None, has)
+        leftovers = await page.evaluate("""() => {
+          localStorage.removeItem('switchSurvey.meta.v1');
+          localStorage.removeItem('switchSurvey.data.v2');
+          return {
+            meta: localStorage.getItem('switchSurvey.meta.v1'),
+            data: localStorage.getItem('switchSurvey.data.v2')
+          };
+        }""")
+        check("storage cleared", leftovers.get("meta") is None and leftovers.get("data") is None, leftovers)
         await ctx.close()
         await browser.close()
 

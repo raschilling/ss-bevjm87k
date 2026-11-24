@@ -6,7 +6,6 @@ from playwright.async_api import async_playwright
 BASE = os.environ.get("SS_BASE", "http://127.0.0.1:8773/index.html")
 OUT = Path(os.environ.get("SS_OUT", "/workspace/switch-survey/verify/scenarios"))
 OUT.mkdir(parents=True, exist_ok=True)
-PIN = os.environ.get("SS_TEST_PIN", "2468")
 WEBKIT = "/home/box/.cache/ms-playwright/webkit-2388/pw_run.sh"
 results = {"ok": True, "base": BASE, "scenarios": [], "checks": []}
 
@@ -20,17 +19,6 @@ def check(name, cond, detail=""):
 def rec_scenario(name, ok, expected, actual, detail=""):
     results["scenarios"].append({"name": name, "ok": bool(ok), "expected": expected, "actual": actual, "detail": detail})
     check("scenario: " + name, ok, detail or json.dumps(actual, default=str))
-
-async def press_pin(page, pin, confirm=False):
-    await page.wait_for_selector("#keypad")
-    for d in pin:
-        await page.click(f'.key[data-key="{d}"]')
-    await page.click('.key[data-key="OK"]')
-    if confirm:
-        await page.wait_for_timeout(80)
-        for d in pin:
-            await page.click(f'.key[data-key="{d}"]')
-        await page.click('.key[data-key="OK"]')
 
 async def shot(page, name):
     path = OUT / name
@@ -237,9 +225,13 @@ async def run():
         await page.goto(BASE, wait_until="load")
         await page.wait_for_selector("h1")
         check("title", await page.title() == "Switch Survey")
-        await press_pin(page, PIN, confirm=True)
         await page.wait_for_selector("[data-tab='walk']")
         body = await page.inner_text("body")
+        check("first launch has no PIN screen",
+              await page.locator("#keypad").count() == 0 and "Set a PIN" not in body and "Enter PIN" not in body
+              and "Change PIN" not in body and "Open your saved survey" not in body)
+        check("first launch is the survey form", "Add a switch" in body and "Save switch" in body)
+        await shot(page, "393-dark-first-launch.png")
         check("Survey tab label", (await page.locator('[data-tab="walk"]').inner_text()).strip() == "Survey")
         check("no yes/no light question on main survey", "Is the light in this room?" not in body and "Light is in a different room" not in body and "Where is the light?" not in body)
         await open_hint(page, "addSwitch")
@@ -262,7 +254,7 @@ async def run():
         await shot(page, "393-dark-exterior-rooms.png")
         await page.click('[data-field="floor"] .chip[data-value="Main"]')
         await page.wait_for_timeout(80)
-        # Close the intro hint and wait out the PIN flash so the measure is a typical entry.
+        # Close the intro hint so the measure is a typical entry.
         btn = page.locator('[data-toggle-hint="addSwitch"]')
         if await btn.count() and (await btn.get_attribute("aria-expanded")) == "true":
             await btn.click()
@@ -510,7 +502,7 @@ async def run():
             "plates": {1: 2}, "locations": 2, "verify": 0
         })
 
-        # 11. Reload + PIN mid-walk, nothing lost
+        # 11. Reload mid-survey, nothing lost (no PIN)
         await goto_walk_new_home(page, "S11 Persistence")
         await pick_room_load(page, "Office", "Pendants")
         await set_fixture(page, 3)
@@ -518,11 +510,10 @@ async def run():
         await pick_room_load(page, "Office", "Sconces")
         await save(page)
         await page.reload(wait_until="load")
-        await page.wait_for_selector("#keypad")
-        title = await page.inner_text(".card h2")
-        check("S11 reload is Enter PIN once", "Enter PIN" in title and "Set a PIN" not in title)
-        await press_pin(page, PIN, confirm=False)
         await page.wait_for_selector("[data-tab='walk']", timeout=4000)
+        body = await page.inner_text("body")
+        check("S11 reload has no PIN screen",
+              await page.locator("#keypad").count() == 0 and "Enter PIN" not in body and "Set a PIN" not in body)
         await page.click("[data-tab='homes']")
         await page.wait_for_timeout(100)
         check("S11 home still listed", "S11 Persistence" in (await page.inner_text("body")))
@@ -687,15 +678,30 @@ async def run():
         check("light Exterior rooms are outdoor spots", "Front porch" in opts and "Kitchen" not in opts, opts)
         await shot(page, "393-light-exterior-rooms.png")
 
+        # Light first launch and empty survey form (fresh profile)
+        light_ctx = await browser.new_context(viewport={"width": 393, "height": 852}, color_scheme="light", device_scale_factor=2)
+        light_page = await light_ctx.new_page()
+        await light_page.goto(BASE, wait_until="load")
+        await light_page.wait_for_selector("[data-tab='walk']")
+        lbody = await light_page.inner_text("body")
+        check("light first launch has no PIN screen",
+              await light_page.locator("#keypad").count() == 0 and "Set a PIN" not in lbody and "Enter PIN" not in lbody)
+        check("light first launch is the survey form", "Add a switch" in lbody and "Save switch" in lbody)
+        await shot(light_page, "393-light-first-launch.png")
+        await pick_room_load(light_page, "Kitchen", "Can lights")
+        await shot(light_page, "393-light-survey-form.png")
+        await light_ctx.close()
+
         # clear
-        await page.reload(wait_until="load")
-        await page.wait_for_selector("#forgot")
-        await page.click("#forgot")
-        await page.click("#forgotWarn")
-        await page.click("#forgotConfirm")
-        await page.wait_for_timeout(150)
-        has = await page.evaluate("() => localStorage.getItem('switchSurvey.meta.v1')")
-        check("storage cleared", has is None, has)
+        leftovers = await page.evaluate("""() => {
+          localStorage.removeItem('switchSurvey.meta.v1');
+          localStorage.removeItem('switchSurvey.data.v2');
+          return {
+            meta: localStorage.getItem('switchSurvey.meta.v1'),
+            data: localStorage.getItem('switchSurvey.data.v2')
+          };
+        }""")
+        check("storage cleared", leftovers.get("meta") is None and leftovers.get("data") is None, leftovers)
         await ctx.close()
         await browser.close()
 
