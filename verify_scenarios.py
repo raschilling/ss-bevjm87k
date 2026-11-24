@@ -95,6 +95,12 @@ async def set_fan(page, label):
     await page.click(f'[data-field="fanType"] .chip[data-value="{label}"]')
     await page.wait_for_timeout(60)
 
+async def set_kind(page, label):
+    await page.click(f'[data-field="kindOverride"] .chip[data-value="{label}"]')
+    await page.wait_for_timeout(80)
+
+UNSURE_DIMMABLE_NOTE = "Not sure if dimmable: set to on/off mode if the bulbs don't dim, or swap to dimmable LEDs."
+
 async def set_fixture(page, n):
     if n > 8:
         await page.click('[data-field="fixtureCount"] .chip[data-value="8+"]')
@@ -231,6 +237,7 @@ async def run():
         check("no yes/no light question on main walk", "Is the light in this room?" not in body and "Light is in a different room" not in body and "Where is the light?" not in body)
         check("intro mentions tap name under Load", "tap its name under Load" in body)
         check("Which one? has Island/Sink/#2 tags", "Island" in body and "Sink" in body and "#2" in body)
+        check("Switch type has Not sure if dimmable", "Not sure if dimmable" in body)
 
         # 1. Simple room + 3-gang box
         await goto_walk_new_home(page, "S1 Simple and 3-gang")
@@ -530,6 +537,67 @@ async def run():
             "plates": {1: 1}, "locations": 1, "verify": 0
         })
 
+
+        # 13. Not sure if dimmable still orders dimmers
+        await goto_walk_new_home(page, "S13 Not sure dimmable")
+        await pick_room_load(page, "Living room", "Can lights")
+        check("S13 form offers Not sure if dimmable", "Not sure if dimmable" in (await page.inner_text("body")))
+        await save(page)
+        await pick_room_load(page, "Kitchen", "Can lights")
+        await set_kind(page, "Not sure if dimmable")
+        body = await page.inner_text("body")
+        check("S13 preview orders as a Dimmer", "orders as a Dimmer (not sure if dimmable)" in body)
+        await shot(page, "393-dark-walk-unsure.png")
+        await save(page)
+        await pick_room_load(page, "Hall", "Can lights")
+        await set_kind(page, "Not sure if dimmable")
+        await save(page)
+        await pick_room_load(page, "Office", "Can lights")
+        await set_kind(page, "Not sure if dimmable")
+        await save(page)
+        await pick_room_load(page, "Closet", "Closet light")
+        await save(page)
+        ok, actual, body = await assert_order(page, "S13 not-sure-dimmable orders dimmers", {
+            "dimmer": 4, "onoff": 1, "fan": 0, "companion": 0, "dumb": 0,
+            "plates": {1: 5}, "locations": 5, "verify": 0
+        })
+        check("S13 summary count", "3 dimmers marked not-sure-dimmable" in body)
+        check("S13 exact note on order sheet", UNSURE_DIMMABLE_NOTE in body)
+        check("S13 undecided brand note", "Inovelli Blue and Red dimmers have an on/off mode" in body and "Caseta in-wall dimmers do not" in body and "full brightness" in body)
+        await page.click('[data-field="brand"] .chip[data-value="Inovelli"]')
+        await page.wait_for_timeout(80)
+        body = await page.inner_text("body")
+        check("S13 Inovelli brand note", "Inovelli Blue and Red dimmers have an on/off mode" in body and "set the dimmer to on/off" in body)
+        check("S13 Inovelli note is not the Caseta in-wall wording", "no on/off mode on the dimmer itself" not in body)
+        await page.click('[data-field="brand"] .chip[data-value="Lutron Caseta"]')
+        await page.wait_for_timeout(80)
+        body = await page.inner_text("body")
+        check("S13 Caseta brand note", "no on/off mode on the dimmer itself" in body and "full brightness" in body and "Lutron rates the in-wall dimmer for dimmable lamps only" in body)
+        check("S13 exact note still present under Caseta", UNSURE_DIMMABLE_NOTE in body)
+        await shot(page, "393-dark-summary-unsure.png")
+        async with page.expect_download() as dl:
+            await page.click("#exportCsv")
+        csvp = OUT / "s13-not-sure-dimmable.csv"
+        await (await dl.value).save_as(str(csvp))
+        csv = csvp.read_text(encoding="utf-8")
+        shop = await parse_csv_shop(csv)
+        check("S13 CSV shopping list is 4 dimmers + 1 on/off + 5 plates",
+              shop.get("Smart dimmer") == 4 and shop.get("Smart on/off") == 1 and shop.get("1-gang wallplate") == 5, shop)
+        check("S13 CSV has exact note", UNSURE_DIMMABLE_NOTE in csv)
+        check("S13 CSV has count line", "3 dimmers marked not-sure-dimmable" in csv)
+        async with page.expect_download() as dl:
+            await page.click("#exportJson")
+        jp = OUT / "s13-not-sure-dimmable.json"
+        await (await dl.value).save_as(str(jp))
+        data = json.loads(jp.read_text(encoding="utf-8"))
+        homes = data.get("homes") or []
+        h = next((x for x in homes if x.get("name") == "S13 Not sure dimmable"), homes[0] if homes else {})
+        switches = h.get("switches") or []
+        unsure = [s for s in switches if s.get("kindOverride") == "unsure-dimmable"]
+        check("S13 JSON has 5 switches, 3 marked unsure-dimmable", len(switches) == 5 and len(unsure) == 3, (len(switches), len(unsure)))
+        notes = h.get("shoppingNotes") or data.get("shoppingNotes") or []
+        check("S13 JSON shoppingNotes include the exact note", UNSURE_DIMMABLE_NOTE in notes, notes)
+
         # Light theme screenshots of walk form + summary, chips visible
         await page.click("[data-tab='homes']")
         await page.wait_for_timeout(80)
@@ -547,6 +615,22 @@ async def run():
         await page.click("[data-tab='summary']")
         await page.wait_for_timeout(80)
         await shot(page, "393-light-summary.png")
+
+        await page.click("[data-tab='homes']")
+        await page.wait_for_timeout(80)
+        await page.click("text=S13 Not sure dimmable")
+        await page.wait_for_timeout(150)
+        await page.click("[data-tab='walk']")
+        await pick_room_load(page, "Kitchen", "Can lights")
+        await set_kind(page, "Not sure if dimmable")
+        body = await page.inner_text("body")
+        check("light walk form shows Not sure if dimmable", "Not sure if dimmable" in body)
+        await shot(page, "393-light-walk-unsure.png")
+        await page.click("[data-tab='summary']")
+        await page.wait_for_timeout(80)
+        body = await page.inner_text("body")
+        check("light summary shows not-sure count and note", "3 dimmers marked not-sure-dimmable" in body and UNSURE_DIMMABLE_NOTE in body)
+        await shot(page, "393-light-summary-unsure.png")
 
         # clear
         await page.reload(wait_until="load")

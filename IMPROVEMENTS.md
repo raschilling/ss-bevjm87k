@@ -93,3 +93,15 @@ Same-room **Same light** vs **New light**, plus the optional tags, is unchanged 
 
 `verify_scenarios.py` S2 (stairs across floors) and S4 (4-way hall across rooms) now use the chip instead of the old More control.
 
+## 2026-11-24 — Not sure if dimmable
+
+When you don’t know whether the lights will dim, but still need to pick a switch, tap **Not sure if dimmable** next to Dimmer / On/off / Fan. There is no extra screen. It still orders a **dimmer** (counted with the other dimmers on the shopping list). The order sheet, CSV, and JSON include this note:
+
+> Not sure if dimmable: set to on/off mode if the bulbs don't dim, or swap to dimmable LEDs.
+
+Summary also shows a count, for example **3 dimmers marked not-sure-dimmable**.
+
+Brand notes stay accurate against the manufacturer docs: Inovelli Blue and Red dimmers have a documented on/off mode. Caseta in-wall dimmers do not (only the plug-in lamp dimmer can convert to switch mode). If the bulbs don’t dim, leave a Caseta in-wall dimmer at full brightness, or swap to dimmable LEDs or a Caseta on/off switch. Lutron rates the in-wall dimmer for dimmable lamps only.
+
+`verify_scenarios.py` S13 walks one regular dimmer, three not-sure dimmers, and one closet on/off, and asserts the order sheet, the exact note, the brand wording, and CSV/JSON.
+

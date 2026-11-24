@@ -156,6 +156,7 @@
     let changed = false;
     store.homes.forEach((h) => {
       if (!h.neutrals || h.neutrals === "unknown") { h.neutrals = "yes"; changed = true; }
+      if (h && "shoppingNotes" in h) { delete h.shoppingNotes; changed = true; }
     });
     return changed;
   }
@@ -179,10 +180,17 @@
     if (["Exhaust fan","Closet light","Flood lights","Exterior lights","Lamp outlet"].includes(load)) return "onoff";
     return "dimmer";
   }
+  const UNSURE_DIMMABLE_NOTE = "Not sure if dimmable: set to on/off mode if the bulbs don't dim, or swap to dimmable LEDs.";
+  function isUnsureDimmable(sw) { return !!(sw && sw.kindOverride === "unsure-dimmable"); }
   function kindLabel(k) { return k === "fan" ? "Fan" : k === "onoff" ? "On/off" : "Dimmer"; }
-  function kindChipLabel(v) { return v === "onoff" ? "On/off" : v === "fan" ? "Fan" : "Dimmer"; }
-  function kindChipValue(label) { return label === "On/off" ? "onoff" : label === "Fan" ? "fan" : "dimmer"; }
+  function kindChipLabel(v) { return v === "onoff" ? "On/off" : v === "fan" ? "Fan" : v === "unsure-dimmable" ? "Not sure if dimmable" : "Dimmer"; }
+  function kindChipValue(label) { return label === "On/off" ? "onoff" : label === "Fan" ? "fan" : label === "Not sure if dimmable" ? "unsure-dimmable" : "dimmer"; }
+  function effectiveKind(override, derived) {
+    if (override === "unsure-dimmable") return "dimmer";
+    return override || derived;
+  }
   function orderHint(d, useKind) {
+    if (d.kindOverride === "unsure-dimmable") return "orders as a Dimmer (not sure if dimmable)";
     if (useKind === "fan") {
       const ft = d.fanType === "ac" ? "ac" : d.fanType === "dc" ? "dc" : "unknown";
       if (ft === "ac") return "orders as a Fan (AC)";
@@ -190,6 +198,11 @@
       return "verify fan type on site before ordering (AC = fan switch, DC = on/off)";
     }
     return "orders as a " + kindLabel(useKind || "dimmer");
+  }
+  function unsureDimmableBrandNote(brand) {
+    if (brand === "inovelli") return "Inovelli Blue and Red dimmers have an on/off mode. If the bulbs don't dim, set the dimmer to on/off, or swap to dimmable LEDs.";
+    if (brand === "caseta") return "Caseta in-wall dimmers have no on/off mode on the dimmer itself. If the bulbs don't dim, leave the dimmer at full brightness, or swap to dimmable LEDs or a Caseta on/off switch. Lutron rates the in-wall dimmer for dimmable lamps only.";
+    return "Inovelli Blue and Red dimmers have an on/off mode for this. Caseta in-wall dimmers do not; leave the dimmer at full brightness, or swap to dimmable LEDs or a Caseta on/off switch. Lutron rates Caseta in-wall dimmers for dimmable lamps only.";
   }
   function groupKeyOf(sw, home) {
     const load = sw.load === "Other" ? "Other" : sw.load;
@@ -243,6 +256,7 @@
   function isSmart(sw) { return sw.loggedDumb !== true; }
   function shopKind(sw) {
     if (sw.loggedDumb && !sw.groupId) return "dumb";
+    if (sw.kindOverride === "unsure-dimmable") return "dimmer";
     if (sw.kindOverride) return sw.kindOverride;
     return kindForLoad(sw.load === "Other" ? (sw.loadOther || "") : sw.load);
   }
@@ -484,14 +498,18 @@
   function plateName(brand, gang) { return brand === "caseta" ? "Claro " + gang + "-gang" : gang + "-gang wallplate"; }
   function summaryOf(home) {
     const shopped = home.switches.filter((s) => (isSmart(s) || s.groupId) && !isVerifyDevice(s, home));
-    let dimmer = 0, onoff = 0, fan = 0, companion = 0, dumb = 0, dcFanOnOff = 0;
+    let dimmer = 0, onoff = 0, fan = 0, companion = 0, dumb = 0, dcFanOnOff = 0, unsureDimmable = 0;
     const verifyOnSite = [];
     const countedGroups = new Set();
+    const groupUnsure = (s) => {
+      if (isUnsureDimmable(s)) return true;
+      return !!(s.groupId && (home.switches || []).some((m) => m.groupId === s.groupId && isUnsureDimmable(m)));
+    };
     const countMain = (s) => {
       const k = buyKind(s, home);
       if (k === "fan") fan++;
       else if (k === "onoff") { onoff++; if (shopKind(s) === "fan" && fanTypeOf(s) === "dc") dcFanOnOff++; }
-      else if (k) dimmer++;
+      else if (k) { dimmer++; if (groupUnsure(s)) unsureDimmable++; }
     };
     const markVerify = (s) => {
       if (isVerifyFan(s) || roleOf(s, home) === "Main" || !s.groupId) {
@@ -564,7 +582,7 @@
     if (groups.length) issues.push("Confirm traveler wiring and which box has line for " + groups.length + " multi-way group" + (groups.length === 1 ? "" : "s") + ". Put the smart main where line and, if possible, a neutral arrive.");
     const heavy = home.switches.filter((s) => isSmart(s) && fixtureCountOf(s) >= 6);
     if (heavy.length) issues.push("Check that the total fixture wattage stays within the switch's rating for: " + heavy.map((s) => listLabel(s, home)).join("; ") + ". This matters most with many LED cans or wafers on a dimmer.");
-    return { dimmer, onoff, fan, companion, dumb, dcFanOnOff, plates, groups, issues, verifyOnSite, locations: home.switches.length };
+    return { dimmer, onoff, fan, companion, dumb, dcFanOnOff, unsureDimmable, plates, groups, issues, verifyOnSite, locations: home.switches.length };
   }
   function orderRows(home) {
     const brand = home.brand, s = summaryOf(home), rows = [];
@@ -580,6 +598,11 @@
     [1,2,3,4].forEach((g) => add(g + "-gang wallplate", s.plates[g], "plate"));
     const notes = [];
     if (s.dcFanOnOff) notes.push((s.dcFanOnOff === s.onoff ? "These on/off switches" : (s.dcFanOnOff + " of these on/off switches")) + " are for DC fans (constant power). Speed via fan remote/integration.");
+    if (s.unsureDimmable) {
+      notes.push(s.unsureDimmable + " dimmer" + (s.unsureDimmable === 1 ? "" : "s") + " marked not-sure-dimmable");
+      notes.push(UNSURE_DIMMABLE_NOTE);
+      notes.push(unsureDimmableBrandNote(brand));
+    }
     return { s, rows, notes };
   }
   function csvEscape(v) { const t = String(v ?? ""); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }
@@ -607,7 +630,13 @@
     if (s.issues.length) { lines.push("", "OPEN ISSUES"); s.issues.forEach((i) => lines.push(csvEscape(i))); }
     return lines.join("\n");
   }
-  function exportJson(store) { return JSON.stringify({ version: 1, kind: "ha-switch-survey", homes: store.homes, activeHomeId: store.activeHomeId }, null, 2); }
+  function exportJson(store) {
+    const homes = (store.homes || []).map((h) => {
+      const notes = orderRows(h).notes || [];
+      return notes.length ? { ...h, shoppingNotes: notes } : { ...h };
+    });
+    return JSON.stringify({ version: 1, kind: "ha-switch-survey", homes, activeHomeId: store.activeHomeId }, null, 2);
+  }
 
   const EXAMPLE = [
     ["Main","Foyer","Other","","Bottom of stairs",2,1,"","Stair lights"],
@@ -920,7 +949,7 @@
   function renderWalk(home) {
     const d = state.draft;
     const derived = d.load ? kindForLoad(d.load === "Other" ? "Other" : d.load) : "";
-    const useKind = d.kindOverride || derived;
+    const useKind = effectiveKind(d.kindOverride, derived);
     const showLoc = Boolean(state.pendingMatch || d.groupId);
     const preview = (function () {
       const n = Number(d.fixtureCount);
@@ -947,7 +976,7 @@
         ${existingLightsHtml(home, d)}
         ${isMultiFixture(d.load) ? `<div class="field-wrap"><label class="field">How many?</label>${chipRow("fixtureCount", ["1","2","3","4","5","6","7","8","8+"], (d.fixtureMany || Number(d.fixtureCount) > 8) ? "8+" : (d.fixtureCount ? String(d.fixtureCount) : ""))}${(d.fixtureMany || Number(d.fixtureCount) > 8) ? `<input type="number" data-field="fixtureCount" inputmode="numeric" min="9" step="1" value="${esc(String(d.fixtureCount || ""))}" placeholder="9 or more">` : ""}<p class="hint">Optional. How many lights this switch controls, e.g. 6 cans in a hall.</p></div>` : ""}
         <div class="field-wrap"><label class="field">Which one? (only if this room has two)</label>${chipRow("qualifier", QUALIFIERS, d.qualifier)}<p class="hint">Use this when the room has more than one of the same kind of light, e.g. Island and Sink cans. The name chips are these tags.</p></div>
-        ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Switch type</label>${chipRow("kindOverride", ["Dimmer","On/off","Fan"], kindChipLabel(useKind || "dimmer"))}<p class="hint">Filled in from what the switch controls. Tap once to change.</p></div>` : ""}
+        ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Switch type</label>${chipRow("kindOverride", ["Dimmer","On/off","Fan","Not sure if dimmable"], kindChipLabel(d.kindOverride || useKind || "dimmer"))}<p class="hint">Filled in from what the switch controls. Tap once to change. Not sure if dimmable still orders a dimmer.</p></div>` : ""}
         ${useKind === "fan" && !d.loggedDumb ? `<div class="field-wrap"><label class="field">Fan type</label>${chipRow("fanType", FAN_TYPES, fanTypeLabel(d.fanType))}<p class="hint">AC uses a fan switch. DC uses an on/off (constant power); speed via fan remote/integration. Not sure is listed under Verify on site and stays off the order until you choose.</p></div>` : ""}
         ${d.load ? `<div class="auto">${esc(preview)} · ${esc(orderHint(d, useKind))}.${badgeHtml(draftOthers(home, d))}</div>` : ""}
         <button type="button" class="btn" id="moreToggle">${state.moreOpen ? "Hide more" : "More"}</button>
