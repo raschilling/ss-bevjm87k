@@ -133,7 +133,7 @@
 
 (() => {
   const META_KEY = "switchSurvey.meta.v1";
-  const IDLE_MS = 5 * 60 * 1000;
+  const DATA_KEY = "switchSurvey.data.v2";
   const ITERATIONS = 150000;
   const FLOORS = ["Basement","Main","Upper","Exterior"];
   const INDOOR_ROOMS = ["Bedroom","Closet","Dining room","Family room","Foyer","Garage","Guest bath","Half bath","Hall","Kitchen","Laundry","Living room","Office","Primary bath","Primary bedroom","Stairs","Other"];
@@ -152,11 +152,10 @@
     { value: "unknown", label: "Not sure" }
   ];
   const state = {
-    locked: true, setup: false, pinBuf: "", pinAgain: "", setupStep: 1,
-    unlockError: "", forgot: 0, key: null, store: null, tab: "walk",
+    migrating: false, migrateBuf: "", migrateError: "", migrateForgot: 0, migrateBusy: false,
+    store: null, tab: "walk",
     draft: emptyDraft("Main", ""), pendingMatch: null, moreOpen: false, openHints: {}, fixtureOpen: false, flash: "", storageOk: true, storageNote: ""
   };
-  let backgroundedAt = 0;
 
   function uid(prefix) { return prefix + "_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
   function blankHome() { return { id: uid("home"), name: "", brand: "undecided", neutrals: "yes", rooms: [], switches: [], isExample: false }; }
@@ -845,18 +844,13 @@
     const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pin), "PBKDF2", false, ["deriveKey"]);
     return crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: ITERATIONS, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt","decrypt"]);
   }
-  async function encryptJson(key, obj) {
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(obj)));
-    return { iv: b64(iv), ct: b64(ct) };
-  }
   async function decryptJson(key, payload) {
     const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(payload.iv) }, key, unb64(payload.ct));
     return JSON.parse(new TextDecoder().decode(pt));
   }
   function probeStorage() {
     try {
-      const k = META_KEY + ".probe";
+      const k = DATA_KEY + ".probe";
       localStorage.setItem(k, "ok");
       const ok = localStorage.getItem(k) === "ok";
       localStorage.removeItem(k);
@@ -866,44 +860,112 @@
       return true;
     } catch (e) {
       state.storageOk = false;
-      state.storageNote = "This browser is not saving data. Turn off Private Browsing and open this page in regular Safari, or use the same Home Screen icon each time. If you just added it to your Home Screen, set your PIN from that icon — Safari and the icon can keep separate copies.";
+      state.storageNote = "This browser is not saving data. Turn off Private Browsing and open this page in regular Safari, or use the same Home Screen icon each time. If you just added it to your Home Screen, use that icon — Safari and the icon can keep separate copies.";
       return false;
     }
   }
-  function writeMeta(obj) {
-    if (!probeStorage()) throw new Error("storage");
-    localStorage.setItem(META_KEY, JSON.stringify(obj));
-    const back = localStorage.getItem(META_KEY);
-    if (!back) throw new Error("storage");
-  }
   function readMeta() { try { return JSON.parse(localStorage.getItem(META_KEY) || "null"); } catch { return null; } }
-  function hasPin() { const m = readMeta(); return Boolean(m && m.salt && m.check); }
-  function isSetup() { return Boolean(state.setup || !hasPin()); }
-  async function persist() {
-    if (!state.key || !state.store) return;
+  function readPlain() { try { return JSON.parse(localStorage.getItem(DATA_KEY) || "null"); } catch { return null; } }
+  function hasEncryptedMeta() {
+    const m = readMeta();
+    return Boolean(m && m.salt && m.check);
+  }
+  function hasPlainData() {
+    const d = readPlain();
+    return Boolean(d && d.store && Array.isArray(d.store.homes));
+  }
+  function writePlain() {
+    if (!probeStorage()) throw new Error("storage");
+    const payload = JSON.stringify({
+      v: 2,
+      store: state.store,
+      tab: state.tab,
+      draft: state.draft,
+      pendingMatch: state.pendingMatch
+    });
+    localStorage.setItem(DATA_KEY, payload);
+    if (!localStorage.getItem(DATA_KEY)) throw new Error("storage");
+  }
+  function persist() {
+    if (!state.store) return;
     try {
-      const enc = await encryptJson(state.key, { store: state.store, tab: state.tab, draft: state.draft, pendingMatch: state.pendingMatch });
-      const meta = readMeta() || {};
-      meta.data = enc;
-      writeMeta(meta);
+      writePlain();
     } catch (err) {
       state.storageOk = false;
       state.flash = "Could not save to this browser. Your latest change is on screen only. Avoid Private Browsing, and use the same Safari or Home Screen icon each time.";
       render();
     }
   }
-  async function setNewPin(pin) {
-    if (!probeStorage()) throw new Error("storage");
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const key = await deriveKey(pin, salt);
-    const check = await encryptJson(key, { ok: true, kind: "ha-switch-survey" });
-    state.key = key;
-    if (!state.store) state.store = defaultStore();
-    const enc = await encryptJson(key, { store: state.store, tab: state.tab, draft: state.draft, pendingMatch: state.pendingMatch });
-    writeMeta({ v: 1, salt: b64(salt), iterations: ITERATIONS, check, data: enc });
-    if (!hasPin()) throw new Error("storage");
-    backgroundedAt = 0;
-    state.locked = false; state.setup = false; state.setupStep = 1; state.pinBuf = ""; state.pinAgain = "";
+  function clearMigrateSecrets() {
+    state.migrateBuf = "";
+    state.migrateError = "";
+    state.migrateForgot = 0;
+    state.migrateBusy = false;
+  }
+  function applyBundle(bundle) {
+    const src = bundle && bundle.store && bundle.store.homes ? bundle.store : defaultStore();
+    state.store = src;
+    if (!state.store.homes.length) state.store = defaultStore();
+    const changed = migrateHomes(state.store);
+    state.tab = (bundle && bundle.tab) || "walk";
+    state.draft = (bundle && bundle.draft) || emptyDraft("Main", "");
+    state.pendingMatch = (bundle && bundle.pendingMatch) || null;
+    resolvePendingMatch();
+    return changed;
+  }
+  function startFreshStore() {
+    state.store = defaultStore();
+    state.tab = "walk";
+    state.draft = emptyDraft("Main", "");
+    state.pendingMatch = null;
+    state.migrating = false;
+    clearMigrateSecrets();
+  }
+  function bootFromStorage() {
+    if (hasPlainData()) {
+      const changed = applyBundle(readPlain());
+      state.migrating = false;
+      clearMigrateSecrets();
+      if (hasEncryptedMeta()) {
+        try { localStorage.removeItem(META_KEY); } catch (e) {}
+      }
+      if (changed) persist();
+      return;
+    }
+    if (hasEncryptedMeta()) {
+      state.migrating = true;
+      state.store = null;
+      state.migrateBuf = "";
+      state.migrateError = "";
+      state.migrateForgot = 0;
+      return;
+    }
+    startFreshStore();
+    try { persist(); } catch (e) {}
+  }
+  async function migrateWithPin(pin) {
+    const meta = readMeta();
+    if (!meta || !meta.salt || !meta.check) return false;
+    let bundle;
+    try {
+      const key = await deriveKey(pin, unb64(meta.salt));
+      await decryptJson(key, meta.check);
+      bundle = meta.data ? await decryptJson(key, meta.data) : { store: defaultStore() };
+    } catch (e) {
+      return false;
+    }
+    applyBundle(bundle);
+    writePlain();
+    if (!hasPlainData()) throw new Error("storage");
+    try { localStorage.removeItem(META_KEY); } catch (e) {}
+    state.migrating = false;
+    clearMigrateSecrets();
+    return true;
+  }
+  function startFreshFromLocked() {
+    try { localStorage.removeItem(META_KEY); } catch (e) {}
+    startFreshStore();
+    persist();
   }
   function resolvePendingMatch() {
     const pending = state.pendingMatch;
@@ -918,39 +980,7 @@
     setHome(home);
     state.pendingMatch = null;
   }
-  async function tryUnlock(pin) {
-    const meta = readMeta();
-    if (!meta) return false;
-    try {
-      const key = await deriveKey(pin, unb64(meta.salt));
-      await decryptJson(key, meta.check);
-      const bundle = meta.data ? await decryptJson(key, meta.data) : { store: defaultStore() };
-      state.key = key;
-      state.store = bundle.store && bundle.store.homes ? bundle.store : defaultStore();
-      if (!state.store.homes.length) state.store = defaultStore();
-      const migrated = migrateHomes(state.store);
-      state.tab = bundle.tab || "walk";
-      state.draft = bundle.draft || emptyDraft("Main", "");
-      state.pendingMatch = bundle.pendingMatch || null;
-      resolvePendingMatch();
-      state.locked = false; state.unlockError = ""; state.pinBuf = "";
-      state.setup = false; state.setupStep = 1; state.pinAgain = "";
-      backgroundedAt = 0;
-      if (migrated) await persist();
-      return true;
-    } catch { return false; }
-  }
-  function lockNow() {
-    backgroundedAt = 0;
-    state.key = null; state.locked = true; state.pinBuf = ""; state.pinAgain = ""; state.unlockError = ""; state.forgot = 0;
-    state.setup = false;
-    render();
-  }
-  function resetAllData() {
-    localStorage.removeItem(META_KEY);
-    state.key = null; state.store = null; state.draft = emptyDraft("Main", ""); state.pendingMatch = null;
-    state.tab = "walk"; state.setup = true; state.setupStep = 1; state.pinBuf = ""; state.pinAgain = ""; state.forgot = 0; state.locked = true;
-  }
+
   function applyChrome() {
     const dark = matchMedia("(prefers-color-scheme: dark)").matches;
     const color = dark ? "#111111" : "#f3f1ea";
@@ -974,29 +1004,26 @@
   function render() {
     applyChrome();
     const root = document.getElementById("app");
-    if (state.locked || !state.store) { root.replaceChildren(renderLock()); bindLock(); return; }
+    if (state.migrating) { root.replaceChildren(renderMigrate()); bindMigrate(); return; }
+    if (!state.store) { bootFromStorage(); }
+    if (state.migrating) { root.replaceChildren(renderMigrate()); bindMigrate(); return; }
+    if (!state.store) startFreshStore();
     root.replaceChildren(renderMain());
     bindMain();
   }
-  function renderLock() {
-    const setup = isSetup();
-    const title = setup ? (state.setupStep === 1 ? "Set a PIN" : "Confirm your new PIN") : "Enter PIN";
-    const hint = setup
-      ? (state.setupStep === 1 ? "Step 1 of 2 — choose a 4–6 digit PIN for this phone. It is not uploaded anywhere." : "Step 2 of 2 — type the same PIN once more to confirm.")
-      : "Type your PIN once, then tap OK. You only confirm twice when first setting a PIN.";
-    const buf = setup && state.setupStep === 2 ? state.pinAgain : state.pinBuf;
+  function renderMigrate() {
+    const buf = state.migrateBuf || "";
     const dots = Array.from({ length: Math.max(4, buf.length) }, (_, i) => `<span class="dot ${i < buf.length ? "on" : ""}"></span>`).join("");
     const keys = ["1","2","3","4","5","6","7","8","9","Del","0","OK"];
     let extra = "";
     if (!state.storageOk && state.storageNote) extra += `<div class="banner danger">${esc(state.storageNote)}</div>`;
-    if (setup && hasPin() && state.store) extra += `<button type="button" class="btn quiet" id="cancelSetup">Cancel</button>`;
-    if (state.unlockError) extra += `<div class="banner danger">${esc(state.unlockError)}</div>`;
-    if (!setup && state.forgot === 0) extra += `<button type="button" class="btn quiet" id="forgot">Forgot PIN</button>`;
-    if (state.forgot === 1) extra += `<div class="banner warn">Resetting the PIN will erase all Switch Survey data on this phone. You cannot export while locked. If you already have a JSON backup, you can import it after you set a new PIN. This cannot recover data without the current PIN or a backup.</div><div class="row"><button type="button" class="btn" id="forgotCancel">Cancel</button><button type="button" class="btn danger" id="forgotWarn">I understand, continue</button></div>`;
-    if (state.forgot === 2) extra += `<div class="banner danger">Last step: erase all homes on this phone and set a new PIN?</div><div class="row"><button type="button" class="btn" id="forgotCancel">Cancel</button><button type="button" class="btn danger" id="forgotConfirm">Erase and reset PIN</button></div>`;
+    if (state.migrateError) extra += `<div class="banner danger">${esc(state.migrateError)}</div>`;
+    if (state.migrateForgot === 0) extra += `<button type="button" class="btn quiet" id="migrateForgot">I don't have that PIN</button>`;
+    if (state.migrateForgot === 1) extra += `<div class="banner warn">The locked survey on this phone cannot be opened without that PIN. Starting fresh erases it. If you have a JSON backup, you can import it after.</div><div class="row"><button type="button" class="btn" id="migrateForgotCancel">Cancel</button><button type="button" class="btn danger" id="migrateForgotWarn">I understand, continue</button></div>`;
+    if (state.migrateForgot === 2) extra += `<div class="banner danger">Last step: erase the locked survey on this phone and start fresh?</div><div class="row"><button type="button" class="btn" id="migrateForgotCancel">Cancel</button><button type="button" class="btn danger" id="migrateForgotConfirm">Erase locked survey and start fresh</button></div>`;
     const wrap = document.createElement("div");
     wrap.className = "lock";
-    wrap.innerHTML = `<div class="topbar"><div><h1>Switch Survey</h1><div class="sub">${esc(hint)}</div></div></div><div class="card"><h2>${esc(title)}</h2><div class="dots">${dots}</div><div class="keypad" id="keypad">${keys.map((k) => `<button type="button" class="key" data-key="${esc(k)}">${k}</button>`).join("")}</div>${extra}</div>`;
+    wrap.innerHTML = `<div class="topbar"><div><h1>Switch Survey</h1><div class="sub">This phone already has a survey that was locked with a PIN. Enter that PIN once to keep your homes and switches. After this, it stays saved on this phone and will not ask again.</div></div></div><div class="card" id="migrateUnlock"><h2>Open your saved survey</h2><div class="dots">${dots}</div><div class="keypad" id="keypad">${keys.map((k) => `<button type="button" class="key" data-key="${esc(k)}">${k}</button>`).join("")}</div>${extra}</div>`;
     return wrap;
   }
   function renderMain() {
@@ -1271,72 +1298,56 @@
         <button type="button" class="btn" id="exportCsv">Export this home CSV</button>
         <button type="button" class="btn" id="shareBtn">Copy / Share this home</button>
         <label class="field">Import JSON</label><input type="file" id="importFile" accept="application/json,.json">
-      </div></div>
-      <div class="card">${headingInfo("PIN", "pin", "Change your PIN while unlocked. Forgot PIN is on the lock screen and erases data on this phone unless you already have a backup.")}
-        <button type="button" class="btn" id="changePin">Change PIN</button>
-      </div>`;
+      </div></div>`;
     return frag;
   }
 
-  function bindLock() {
-    document.getElementById("keypad")?.addEventListener("click", onKey);
-    document.getElementById("forgot")?.addEventListener("click", () => { state.forgot = 1; render(); });
-    document.getElementById("forgotCancel")?.addEventListener("click", () => { state.forgot = 0; render(); });
-    document.getElementById("forgotWarn")?.addEventListener("click", () => { state.forgot = 2; render(); });
-    document.getElementById("forgotConfirm")?.addEventListener("click", () => { resetAllData(); render(); });
-    document.getElementById("cancelSetup")?.addEventListener("click", () => {
-      if (!state.store || !state.key) return;
-      state.setup = false; state.locked = false; state.pinBuf = ""; state.pinAgain = ""; state.setupStep = 1; state.unlockError = "";
-      render();
-    });
+  function bindMigrate() {
+    document.getElementById("keypad")?.addEventListener("click", onMigrateKey);
+    document.getElementById("migrateForgot")?.addEventListener("click", () => { state.migrateForgot = 1; render(); });
+    document.getElementById("migrateForgotCancel")?.addEventListener("click", () => { state.migrateForgot = 0; render(); });
+    document.getElementById("migrateForgotWarn")?.addEventListener("click", () => { state.migrateForgot = 2; render(); });
+    document.getElementById("migrateForgotConfirm")?.addEventListener("click", () => { startFreshFromLocked(); render(); });
   }
-  function pinField() { return isSetup() && state.setupStep === 2 ? "pinAgain" : "pinBuf"; }
-  function paintPinDots() {
-    const field = pinField();
-    const buf = state[field] || "";
+  function paintMigrateDots() {
+    const buf = state.migrateBuf || "";
     const el = document.querySelector(".dots");
     if (!el) { render(); return; }
     el.innerHTML = Array.from({ length: Math.max(4, buf.length) }, (_, i) => `<span class="dot ${i < buf.length ? "on" : ""}"></span>`).join("");
   }
-  function onKey(ev) {
+  function onMigrateKey(ev) {
     const btn = ev.target.closest("[data-key]"); if (!btn) return;
     ev.preventDefault();
     const k = btn.getAttribute("data-key");
-    const field = pinField();
-    if (k === "Del") { state[field] = state[field].slice(0, -1); state.unlockError = ""; paintPinDots(); return; }
-    if (k === "OK") { submitPin(); return; }
-    if (state[field].length >= 6) return;
-    state[field] += k; state.unlockError = "";
-    paintPinDots();
+    if (k === "Del") { state.migrateBuf = state.migrateBuf.slice(0, -1); state.migrateError = ""; paintMigrateDots(); return; }
+    if (k === "OK") { submitMigrate(); return; }
+    if (state.migrateBuf.length >= 6) return;
+    state.migrateBuf += k; state.migrateError = "";
+    paintMigrateDots();
   }
-  async function submitPin() {
-    if (state.pinBusy) return;
-    const setup = isSetup();
-    if (setup) {
-      if (state.setupStep === 1) {
-        if (state.pinBuf.length < 4 || state.pinBuf.length > 6) { state.unlockError = "Use 4 to 6 digits."; render(); return; }
-        state.setupStep = 2; state.unlockError = ""; render(); return;
-      }
-      if (state.pinAgain !== state.pinBuf) { state.unlockError = "PINs did not match. Start over."; state.setupStep = 1; state.pinBuf = ""; state.pinAgain = ""; render(); return; }
-      state.pinBusy = true;
-      try {
-        await setNewPin(state.pinBuf);
-        flash("PIN set. This survey is saved only on this phone. Use the same Safari or Home Screen icon next time, and avoid Private Browsing.");
-        render();
-      } catch (e) {
-        state.unlockError = state.storageNote || "Could not save your PIN in this browser. Turn off Private Browsing and try again.";
-        state.setupStep = 1;
-        render();
-      } finally { state.pinBusy = false; }
-      return;
-    }
-    if (state.pinBuf.length < 4) { state.unlockError = "Use 4 to 6 digits, then tap OK."; render(); return; }
-    state.pinBusy = true;
+  async function submitMigrate() {
+    if (state.migrateBusy) return;
+    const attempt = state.migrateBuf;
+    if (attempt.length < 4) { state.migrateError = "Use 4 to 6 digits, then tap OK."; render(); return; }
+    state.migrateBusy = true;
+    state.migrateBuf = "";
     try {
-      const ok = await tryUnlock(state.pinBuf);
-      if (!ok) { state.unlockError = "That PIN did not work. Type it once and tap OK."; state.pinBuf = ""; render(); return; }
+      const ok = await migrateWithPin(attempt);
+      if (!ok) {
+        state.migrateError = "That PIN did not work. Try again, or start fresh if you do not have it.";
+        render();
+        return;
+      }
+      flash("Your survey is saved on this phone now, without a lock.");
       render();
-    } finally { state.pinBusy = false; }
+    } catch (e) {
+      state.migrating = true;
+      state.store = null;
+      state.migrateError = state.storageNote || "Could not save the unlocked survey in this browser. Turn off Private Browsing and try again.";
+      render();
+    } finally {
+      state.migrateBusy = false;
+    }
   }
   function flash(msg) { state.flash = msg; setTimeout(() => { if (state.flash === msg) { state.flash = ""; render(); } }, 4000); }
   function bindMain() {
@@ -1433,7 +1444,6 @@
     document.getElementById("deleteHome")?.addEventListener("click", deleteHome);
     document.querySelectorAll("[data-select-home]").forEach((b) => b.addEventListener("click", () => { state.store.activeHomeId = b.getAttribute("data-select-home"); state.draft = emptyDraft("Main",""); state.pendingMatch = null; persist(); render(); }));
     document.getElementById("importFile")?.addEventListener("change", importFile);
-    document.getElementById("changePin")?.addEventListener("click", () => { state.locked = true; state.setup = true; state.setupStep = 1; state.pinBuf = ""; state.pinAgain = ""; state.unlockError = ""; render(); });
   }
   function onChip(field, value) {
     if (field === "neutrals") { const h = homeOf(); h.neutrals = value; setHome(h); render(); return; }
@@ -1767,35 +1777,15 @@
     };
     reader.readAsText(file);
   }
-  function onBackground() {
-    if (!state.locked && state.key) backgroundedAt = Date.now();
-  }
-  function onForeground() {
-    if (state.key && !state.locked && backgroundedAt && Date.now() - backgroundedAt >= IDLE_MS) lockNow();
-    else if (!state.locked) backgroundedAt = 0;
-  }
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) onBackground();
-    else onForeground();
-  });
-  window.addEventListener("pagehide", onBackground);
-  window.addEventListener("pageshow", (ev) => {
-    if (ev.persisted) onForeground();
-  });
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyChrome);
   applyChrome();
   probeStorage();
-  state.setup = !hasPin();
+  bootFromStorage();
   if (["127.0.0.1","localhost"].includes(location.hostname)) {
     window.__ss = {
-      forceIdleLock() { backgroundedAt = Date.now() - IDLE_MS; lockNow(); },
-      setStaleBackground() { backgroundedAt = Date.now() - IDLE_MS; },
-      foreground() { onForeground(); },
-      background() { onBackground(); },
-      isLocked() { return state.locked; },
-      isSetup() { return isSetup(); },
-      setupStep() { return state.setupStep; },
-      lockTitle() { const h = document.querySelector(".card h2"); return h ? h.textContent : ""; },
+      isMigrating() { return !!state.migrating; },
+      hasEncryptedMeta() { return hasEncryptedMeta(); },
+      hasPlainData() { return hasPlainData(); },
       counts() { const h = homeOf(); return h ? summaryOf(h) : null; }
     };
   }

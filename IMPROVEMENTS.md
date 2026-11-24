@@ -128,3 +128,12 @@ Other form wording that was easy to trip over was simplified in the same pass:
 - The note placeholder no longer says “Traveler colors.” It is “Anything to remember at this box.”
 - Light chips on the form are labeled **Lights already logged**.
 
+## 2026-11-24 — No PIN; plain localStorage
+
+The PIN setup, unlock, idle lock, and PIN settings are gone. New and already-plain surveys are saved in this browser as unencrypted JSON under `switchSurvey.data.v2`.
+
+If a phone still has the older encrypted PIN copy (`switchSurvey.meta.v1`), the first open shows a one-time **Open your saved survey** prompt. Enter the old PIN once, the survey is decrypted and saved in plain form, and the encrypted copy is deleted. It will not ask again. A wrong PIN leaves the locked survey in place. If the old PIN is unknown, starting fresh erases only that locked copy (a JSON backup can still be imported).
+
+S11 and the other reload checks now confirm the survey comes back with no unlock step. `verify_plain_storage.py` seeds an encrypted home, unlocks it once, and asserts the homes, switches, and JSON export are kept, then that a second reload stays unlocked.
+
+CSV/JSON import and export, noindex, and robots.txt are unchanged.

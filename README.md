@@ -1,13 +1,25 @@
-# Field survey
+# Switch Survey
 
-Open this site in Safari on your phone and use Add to Home Screen for an app-like page.
+Private, phone-first survey for ordering smart switches. Single-file app. No login. Data stays on the phone, in this browser.
 
-There is no login. Everything you enter stays in this browser and is saved automatically. On first open you set a 4–6 digit PIN. The same PIN is required after a reload or after the page has been in the background for a few minutes.
+## Open it
 
-Use **Homes** to add or switch surveys, load the sample house, and export or import a JSON backup. **Summary** has the order list and CSV export. Share sends the survey data, not just this link.
+1. Copy `index.html` to your phone (AirDrop, Messages, or a private unlisted HTTPS link).
+2. Open it in Safari. Share → Add to Home Screen. The home-screen name is **Switch Survey**.
+3. Name the home, then survey switches. Floor and room stick after you save. Changes autosave in this browser.
 
-On the walk, skip **Which one?** unless a room has two switches for the same kind of light (for example Left and Right recessed). If a light is also switched from another spot you have not logged yet, use **Also controlled from**. Companions on the order list are the extra switches in a 3-way or 4-way (a 4-way is three locations: 1 smart switch + 2 companions).
+Safari is required for reliable save. Chrome or a Files preview may evict data.
 
-If you forget the PIN you cannot export while locked. Resetting the PIN erases the data on this device unless you already have a JSON backup.
+If this phone already has a survey that was locked, you will be asked for the old PIN once. After that, the survey is saved in plain form on this phone and will not ask again.
 
-This URL is unlisted. Please do not post it in a public place.
+## Features
+
+- Multiple homes, separate exports
+- System light/dark (follows the phone)
+- Export JSON backup, CSV order sheet, and Copy/Share of the data (not just the page URL)
+- Import JSON
+- Example house on the Homes tab
+
+## Hosting
+
+This folder is a local copy only. It is not published. Prefer an unlisted HTTPS URL with noindex, a random path, and no public repo listing. Cloudflare Pages, Netlify, or a host you already control can do that. GitHub Pages on a public repo is a poor fit. Home Assistant `/local/` usually still requires HA login and was not writable from here.
