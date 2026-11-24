@@ -38,6 +38,14 @@
     h1 { font-size: 1.45rem; margin: 0 0 4px; letter-spacing: -.02em; }
     h2 { font-size: 1.05rem; margin: 0 0 10px; }
     p, .hint { color: var(--muted); font-size: .92rem; margin: 0 0 10px; }
+    details.neutrals-override { margin-top: 12px; }
+    details.neutrals-override > summary {
+      color: var(--muted); font-size: .92rem; cursor: pointer; list-style: none;
+      text-decoration: underline; text-underline-offset: 2px;
+    }
+    details.neutrals-override > summary::-webkit-details-marker { display: none; }
+    .logged-row { display: flex; gap: 8px; align-items: stretch; margin: 0 0 8px; }
+    .logged-row .list-item { flex: 1; margin: 0; }
     button, select, input, textarea { font: inherit; }
     button { cursor: pointer; }
     .topbar { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
@@ -138,11 +146,19 @@
   let backgroundedAt = 0;
 
   function uid(prefix) { return prefix + "_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
-  function blankHome() { return { id: uid("home"), name: "", brand: "undecided", neutrals: "unknown", rooms: [], switches: [], isExample: false }; }
+  function blankHome() { return { id: uid("home"), name: "", brand: "undecided", neutrals: "yes", rooms: [], switches: [], isExample: false }; }
   function emptyDraft(floor, room) {
     return { editId: "", floor: floor || "Main", room: room || "", roomOther: "", load: "", loadOther: "", qualifier: "", location: "", locationOther: "", gangSize: 1, gangPosition: 1, loggedDumb: false, note: "", kindOverride: "", fanType: "", otherSpots: 0, fixtureCount: "", fixtureMany: false, lightElsewhere: false, lightFloor: "", lightRoom: "", lightRoomOther: "", groupId: "" };
   }
   function defaultStore() { const home = blankHome(); return { version: 1, kind: "ha-switch-survey", homes: [home], activeHomeId: home.id }; }
+  function migrateHomes(store) {
+    if (!store || !Array.isArray(store.homes)) return false;
+    let changed = false;
+    store.homes.forEach((h) => {
+      if (!h.neutrals || h.neutrals === "unknown") { h.neutrals = "yes"; changed = true; }
+    });
+    return changed;
+  }
   function homeOf() { const s = state.store; return s.homes.find((h) => h.id === s.activeHomeId) || s.homes[0]; }
   function setHome(next) { const s = state.store; s.homes = s.homes.map((h) => h.id === next.id ? next : h); persist(); }
   function effectiveLoad(d) { return d.load === "Other" ? (d.loadOther || "Other").trim() : d.load; }
@@ -249,9 +265,14 @@
     if (k === "fan") return fanTypeOf(sw) === "dc" ? "onoff" : "fan";
     return k;
   }
+  function isSplitPair(a, b) {
+    const ax = a && a.excludeIds ? a.excludeIds : [];
+    const bx = b && b.excludeIds ? b.excludeIds : [];
+    return ax.indexOf(b.id) !== -1 || bx.indexOf(a.id) !== -1;
+  }
   function findMatches(home, rec) {
     const key = groupKeyOf(rec, home);
-    return home.switches.filter((s) => s.id !== rec.id && isSmart(s) && groupKeyOf(s, home) === key);
+    return home.switches.filter((s) => s.id !== rec.id && isSmart(s) && groupKeyOf(s, home) === key && !isSplitPair(s, rec));
   }
   function applyGroup(switches, groupId) {
     const members = switches.filter((s) => s.groupId === groupId);
@@ -269,11 +290,31 @@
     const sw = switches.find((s) => s.id === id);
     if (!sw || !sw.groupId) return switches;
     const gid = sw.groupId;
-    let next = switches.map((s) => s.id === id ? { ...s, groupId: "", switchType: "single", groupPosition: 1 } : s);
+    const peers = switches.filter((s) => s.groupId === gid && s.id !== id).map((s) => s.id);
+    let next = switches.map((s) => {
+      if (s.id === id) {
+        const ex = (s.excludeIds || []).concat(peers).filter((v, i, a) => a.indexOf(v) === i);
+        return { ...s, groupId: "", switchType: "single", groupPosition: 1, excludeIds: ex };
+      }
+      if (s.groupId === gid) {
+        const ex = (s.excludeIds || []).concat([id]).filter((v, i, a) => a.indexOf(v) === i);
+        return { ...s, excludeIds: ex };
+      }
+      return s;
+    });
     const left = next.filter((s) => s.groupId === gid);
     if (left.length < 2) next = next.map((s) => s.groupId === gid ? { ...s, groupId: "", switchType: "single", groupPosition: 1 } : s);
     else next = applyGroup(next, gid);
     return next;
+  }
+  function autoJoinMatches(home, rec, matches) {
+    const existing = matches[0];
+    const groupId = existing.groupId || uid("grp");
+    const ids = Array.from(new Set([existing.id, rec.id].concat(matches.map((m) => m.id))));
+    home.switches = joinGroup(home.switches, ids, groupId);
+    const linked = home.switches.find((s) => s.id === rec.id) || rec;
+    const others = effectiveOthers(linked, home);
+    return "Linked as a " + (others >= 2 ? "4-way" : "3-way") + " with " + listLabel(existing, home) + ".";
   }
   function roleOf(sw, home) {
     if (!isSmart(sw) && !sw.groupId) return "";
@@ -399,8 +440,7 @@
       });
     });
     const issues = [];
-    if (home.neutrals === "unknown") issues.push("House neutrals have not been spot-checked. Check a few boxes before ordering on/off or fan devices.");
-    else if (home.neutrals === "no") issues.push(home.brand === "caseta"
+    if (home.neutrals === "no") issues.push(home.brand === "caseta"
       ? "Most boxes do not have a neutral. Caseta dimmers usually do not need a bypass; Caseta on/off and fan controls need a neutral."
       : home.brand === "inovelli"
         ? "Most boxes do not have a neutral. Inovelli dimmers can work without one; plan LED bypasses at small LED fixtures. On/off mode may need a neutral."
@@ -506,7 +546,7 @@
     const home = blankHome();
     home.name = "EXAMPLE — Two-story house";
     home.brand = "undecided";
-    home.neutrals = "mixed";
+    home.neutrals = "yes";
     home.isExample = true;
     const roomMap = {};
     EXAMPLE.forEach((row) => {
@@ -610,6 +650,18 @@
     backgroundedAt = 0;
     state.locked = false; state.setup = false; state.setupStep = 1; state.pinBuf = ""; state.pinAgain = "";
   }
+  function resolvePendingMatch() {
+    const pending = state.pendingMatch;
+    if (!pending || !pending.rec || !state.store) { state.pendingMatch = null; return; }
+    const home = homeOf();
+    const rec = pending.rec;
+    if (!home.switches.some((s) => s.id === rec.id)) home.switches.push(rec);
+    let matches = (pending.matches || []).filter((m) => home.switches.some((s) => s.id === m.id));
+    if (!matches.length) matches = findMatches(home, rec);
+    if (matches.length) autoJoinMatches(home, rec, matches);
+    setHome(home);
+    state.pendingMatch = null;
+  }
   async function tryUnlock(pin) {
     const meta = readMeta();
     if (!meta) return false;
@@ -620,12 +672,15 @@
       state.key = key;
       state.store = bundle.store && bundle.store.homes ? bundle.store : defaultStore();
       if (!state.store.homes.length) state.store = defaultStore();
+      const migrated = migrateHomes(state.store);
       state.tab = bundle.tab || "walk";
       state.draft = bundle.draft || emptyDraft("Main", "");
       state.pendingMatch = bundle.pendingMatch || null;
+      resolvePendingMatch();
       state.locked = false; state.unlockError = ""; state.pinBuf = "";
       state.setup = false; state.setupStep = 1; state.pinAgain = "";
       backgroundedAt = 0;
+      if (migrated) await persist();
       return true;
     } catch { return false; }
   }
@@ -716,23 +771,12 @@
       if (n) return (effectiveRoom(d) || d.floor || "") + " " + (SHORT_LOAD[d.load] || loadBit) + count;
       return displayName({ floor: d.floor, load: d.load, loadOther: d.loadOther, qualifier: d.qualifier, fixtureCount: d.fixtureCount }, effectiveRoom(d) || "Room");
     })();
-    let matchHtml = "";
-    if (state.pendingMatch) {
-      const m = state.pendingMatch.matches[0];
-      const room = roomNameOf(m, home);
-      const nextOthers = Math.max(draftOthers(home, d), state.pendingMatch.matches.length, ...state.pendingMatch.matches.map((x) => Number(x.otherSpots) || 0));
-      const wayWord = nextOthers >= 2 ? "4-way" : "3-way";
-      const lightName = locPair(lightFloorOf(m), lightRoomOf(m, home)) + " " + (m.load === "Other" ? (m.loadOther || "Other") : m.load);
-      matchHtml = `<div class="card mw"><p>Same light as ${esc(lightName)}? This makes it a ${wayWord}.</p><div class="row"><button type="button" class="btn primary" id="linkYes">Link</button><button type="button" class="btn" id="linkNo">Different load</button></div></div>`;
-    }
     const frag = document.createElement("div");
     frag.innerHTML = `
       <div class="card"><label class="field">Home name</label><input type="text" id="homeName" placeholder="Name this house" value="${esc(home.name)}" autocomplete="off"></div>
-      <div class="card"><label class="field">Neutrals in this house</label><div class="chips" data-field="neutrals"></div><p class="hint">A neutral is usually a white wire in the box. Check a few boxes — you do not need one at every switch.</p></div>
-      ${matchHtml}
       <div class="card">
         <h2>${d.editId ? (d.loggedDumb ? "Change a regular switch" : "Edit switch") : "Add a switch"}</h2>
-        <p class="hint">Pick floor, room, and what the switch controls, then save. Switch type is chosen from the load — tap to change. If two switches control the same light, use the same name at both ends. Floor and room stay put after you save.</p>
+        <p class="hint">Walk every switch in order. Floor and room stay put after you save. Switches that control the same light are grouped automatically as a 3-way or 4-way. If the light is in another room, tap Light is somewhere else. If this room has two of the same kind, use Which one?</p>
         <div class="field-wrap"><label class="field">Where the switch is</label>${chipRow("floor", FLOORS, d.floor)}<p class="hint">Floor and room are where this switch is, not necessarily where the light is.</p></div>
         <div class="pair-grid">
         ${selectField("Room", "room", ROOMS, d.room)}
@@ -740,18 +784,18 @@
         </div>
         ${d.room==="Other" ? `<div class="field-wrap"><label class="field">Room name</label><input type="text" data-field="roomOther" value="${esc(d.roomOther)}" placeholder="Mudroom"></div>` : ""}
         ${d.load==="Other" ? `<div class="field-wrap"><label class="field">Load name</label><input type="text" data-field="loadOther" value="${esc(d.loadOther)}" placeholder="Stair lights"></div>` : ""}
-        ${!d.loggedDumb ? `<div class="field-wrap"><button type="button" class="chip" id="lightElse" aria-pressed="${d.lightElsewhere ? "true" : "false"}">Light is somewhere else</button><p class="hint">Tap only if the light is in a different floor or room than this switch. Linking uses the light, so both ends of a 3-way can still match.</p></div>` : ""}
+        ${!d.loggedDumb ? `<div class="field-wrap"><button type="button" class="chip" id="lightElse" aria-pressed="${d.lightElsewhere ? "true" : "false"}">Light is somewhere else</button><p class="hint">Tap only if the light is in a different floor or room than this switch. The same light is grouped automatically, even across rooms.</p></div>` : ""}
         ${!d.loggedDumb && d.lightElsewhere ? `<div class="field-wrap"><label class="field">Light floor</label>${chipRow("lightFloor", FLOORS, d.lightFloor || d.floor)}</div><div class="field-wrap">${selectField("Light room", "lightRoom", ROOMS, d.lightRoom || d.room)}</div>${(d.lightRoom || d.room)==="Other" ? `<div class="field-wrap"><label class="field">Light room name</label><input type="text" data-field="lightRoomOther" value="${esc(d.lightRoomOther)}" placeholder="Stairwell"></div>` : ""}` : ""}
         ${isMultiFixture(d.load) ? `<div class="field-wrap"><label class="field">How many?</label>${chipRow("fixtureCount", ["1","2","3","4","5","6","7","8","8+"], (d.fixtureMany || Number(d.fixtureCount) > 8) ? "8+" : (d.fixtureCount ? String(d.fixtureCount) : ""))}${(d.fixtureMany || Number(d.fixtureCount) > 8) ? `<input type="number" data-field="fixtureCount" inputmode="numeric" min="9" step="1" value="${esc(String(d.fixtureCount || ""))}" placeholder="9 or more">` : ""}<p class="hint">Optional. How many lights this switch controls, e.g. 6 cans in a hall.</p></div>` : ""}
         <div class="field-wrap"><label class="field">Which one? (only if this room has two)</label>${chipRow("qualifier", QUALIFIERS, d.qualifier)}<p class="hint">Skip unless the room has two switches for the same kind of light, e.g. Left/Right recessed.</p></div>
         ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Switch type</label>${chipRow("kindOverride", ["Dimmer","On/off","Fan"], kindChipLabel(useKind || "dimmer"))}<p class="hint">Filled in from what the switch controls. Tap once to change.</p></div>` : ""}
         ${useKind === "fan" && !d.loggedDumb ? `<div class="field-wrap"><label class="field">Fan type</label>${chipRow("fanType", FAN_TYPES, fanTypeLabel(d.fanType))}<p class="hint">AC uses a fan switch. DC uses an on/off (constant power); speed via fan remote/integration. Not sure is listed under Verify on site and stays off the order until you choose.</p></div>` : ""}
-        ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Also controlled from</label>${chipRow("otherSpots", ["None","1 other spot (3-way)","2 other spots (4-way)"], otherSpotsLabel(draftOthers(home, d)))}<p class="hint">If this light has another switch you have not logged yet, tap how many other spots. Logging and linking those later will not double-count them.</p></div>` : ""}
         ${d.load ? `<div class="auto">${esc(preview)} · ${esc(orderHint(d, useKind))}.${badgeHtml(draftOthers(home, d))}</div>` : ""}
-        ${showLoc ? `<div class="field-wrap"><label class="field">Where is this switch?</label>${chipRow("location", LOCATIONS, d.location)}<p class="hint">Used to tell two or more switches for the same light apart, e.g. top of stairs vs bottom.</p></div>` : ""}
-        ${showLoc && d.location==="Other" ? `<div class="field-wrap"><label class="field">Custom location</label><input type="text" data-field="locationOther" value="${esc(d.locationOther)}" placeholder="Landing"></div>` : ""}
         <button type="button" class="btn" id="moreToggle">${state.moreOpen ? "Hide more" : "More"}</button>
         <div id="more" class="${state.moreOpen ? "" : "hidden"}" style="margin-top:12px">
+          ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Also controlled from, optional</label>${chipRow("otherSpots", ["None","1 other spot (3-way)","2 other spots (4-way)"], otherSpotsLabel(draftOthers(home, d)))}<p class="hint">Skip this if you will log every switch. Use it only when the other end will not be logged. Linking later does not double-count.</p></div>` : ""}
+          ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Where is this switch? optional</label>${chipRow("location", LOCATIONS, d.location)}<p class="hint">Optional. Tells two switches for the same light apart, e.g. top of stairs vs bottom.</p></div>` : ""}
+          ${!d.loggedDumb && d.location==="Other" ? `<div class="field-wrap"><label class="field">Custom location</label><input type="text" data-field="locationOther" value="${esc(d.locationOther)}" placeholder="Landing"></div>` : ""}
           <div class="field-wrap"><label class="field">Switches in this box</label>${chipRow("gangSize", ["1","2","3","4"], String(d.gangSize))}<p class="hint">How many switches share this wall box, including this one. Most are just one.</p></div>
           ${d.gangSize > 1 ? `<div class="field-wrap"><label class="field">Which slot, left to right?</label>${chipRow("gangPosition", Array.from({length:d.gangSize},(_,i)=>String(i+1)), String(d.gangPosition))}<p class="hint">Count from the left as you face the wall.</p></div>` : ""}
           <div class="field-wrap"><label class="field">Note, optional</label><textarea data-field="note" placeholder="Traveler colors, leftover questions">${esc(d.note)}</textarea></div>
@@ -766,47 +810,119 @@
         </div>
       </div>`;
     frag.append(renderSavedLists(home));
-    const neu = frag.querySelector('[data-field="neutrals"]');
-    if (neu) neu.innerHTML = NEUTRALS.map((n) => `<button type="button" class="chip" data-value="${n.value}" aria-pressed="${home.neutrals===n.value?"true":"false"}">${esc(n.label)}</button>`).join("");
     return frag;
   }
   function renderSavedLists(home) {
-    const floor = state.draft.floor, room = effectiveRoom(state.draft);
-    const seen = new Set(); const groups = [];
-    home.switches.forEach((sw) => {
-      if (!sw.groupId || seen.has(sw.groupId)) return;
-      const members = home.switches.filter((s) => s.groupId === sw.groupId);
-      if (!members.some((m) => m.floor === floor)) return;
-      seen.add(sw.groupId); groups.push(members);
+    if (!home.switches.length) { const empty = document.createElement("div"); return empty; }
+    let html = `<div class="card"><h2>Logged switches</h2><p class="hint">In the order you saved them. Switches for the same light are grouped automatically and show a 3-way or 4-way badge.</p><div class="stack">`;
+    home.switches.forEach((s, i) => {
+      const others = effectiveOthers(s, home);
+      const badge = isSmart(s) ? badgeHtml(others) : "";
+      const vs = switchVsLight(s, home);
+      const sub = [
+        locPair(s.floor, roomNameOf(s, home)),
+        isSmart(s) ? ((roleOf(s, home) === "Companion" ? "Extra switch" : "Smart") + " " + kindLabel(shopKind(s))) : "Regular (not smart)",
+        locLabel(s),
+        vs
+      ].filter(Boolean).join(" · ");
+      const item = `<button type="button" class="list-item ${isSmart(s) ? "" : "dumb"}" data-edit="${s.id}"><strong>${i + 1}. ${esc(listLabel(s, home))}${badge}</strong><span>${esc(sub)}</span></button>`;
+      if (s.groupId) html += `<div class="logged-row">${item}<button type="button" class="btn" data-unlink="${s.id}">Unlink</button></div>`;
+      else html += item;
     });
-    const singles = home.switches.filter((sw) => !sw.groupId && roomNameOf(sw, home) === room && sw.floor === floor);
-    const smart = singles.filter(isSmart), dumb = singles.filter((s) => !isSmart(s));
-    let html = "";
-    if (groups.length) {
-      html += `<div class="card"><h2>3-way and 4-way on ${esc(floor)}</h2>`;
-      groups.forEach((members) => {
-        const first = members[0];
-        const load = first.load === "Other" ? (first.loadOther || "Other") : first.load;
-        const others = effectiveOthers(first, home);
-        html += `<div class="card mw"><strong>${esc(load)}${badgeHtml(others)}</strong><p class="hint">${esc(wayBadge(others) || wayLabel(members.length))}. “Main” is a starting guess for the smart switch; the electrician confirms which box has the incoming power.</p>`;
-        members.forEach((m, i) => {
-          html += `<div class="row" style="margin-bottom:8px"><button type="button" class="list-item" data-edit="${m.id}"><strong>${i+1} of ${others + 1} · ${esc(locLabel(m) || roomNameOf(m, home))}${badgeHtml(others)}</strong><span>${esc(roleOf(m, home) === "Companion" ? "Extra switch" : "Main (smart)")} · ${esc(roomNameOf(m, home))}${locLabel(m) ? " · " + esc(locLabel(m)) : ""}</span></button><button type="button" class="btn" data-unlink="${m.id}">Unlink</button></div>`;
-        });
-        html += `</div>`;
-      });
-      html += `</div>`;
-    }
-    if (smart.length) {
-      html += `<div class="card"><h2>Smart switches in ${esc(floor)} ${esc(room)}</h2><div class="stack">`;
-      smart.forEach((s) => { html += `<button type="button" class="list-item" data-edit="${s.id}"><strong>${esc(listLabel(s, home))}${badgeHtml(effectiveOthers(s, home))}</strong><span>${s.gangPosition} of ${s.gangSize} in the box · ${esc(kindLabel(shopKind(s)))}</span></button>`; });
-      html += `</div></div>`;
-    }
-    if (dumb.length) {
-      html += `<div class="card"><h2>Regular switches in ${esc(floor)} ${esc(room)}</h2><div class="stack">`;
-      dumb.forEach((s) => { html += `<button type="button" class="list-item dumb" data-edit="${s.id}"><strong>${esc(listLabel(s, home))}</strong><span>Regular (not smart) · tap to change</span></button>`; });
-      html += `</div></div>`;
-    }
+    html += `</div></div>`;
     const box = document.createElement("div"); box.innerHTML = html; return box;
+  }
+  function neutralsOverrideHtml(home) {
+    const neu = home.neutrals || "yes";
+    const summary = neu === "no" ? "Most boxes do not have a neutral. Change"
+      : neu === "mixed" ? "Neutrals are mixed. Change"
+      : neu === "unknown" ? "Not sure about neutrals. Change"
+      : "Older house without neutrals? Change";
+    const chips = `<div class="chips" data-field="neutrals">` + NEUTRALS.map((n) => `<button type="button" class="chip" data-value="${n.value}" aria-pressed="${neu===n.value?"true":"false"}">${esc(n.label)}</button>`).join("") + `</div>`;
+    const soft = neu === "yes" ? `<p class="hint">Assumes boxes have a neutral, which most homes built since the 1980s do. If a box has no white wire bundle, flag it.</p>` : "";
+    return `<details class="neutrals-override"${neu !== "yes" ? " open" : ""}><summary>${esc(summary)}</summary><div class="field-wrap" style="margin-top:10px"><label class="field">Neutrals in this house</label>${chips}<p class="hint">A neutral is usually a white wire in the box. You do not need one at every switch.</p></div></details>${soft}`;
+  }
+  function groupMembersOf(home, group) {
+    if (group.id && home.switches.some((s) => s.groupId === group.id)) return home.switches.filter((s) => s.groupId === group.id);
+    const sw = home.switches.find((s) => s.id === group.id);
+    return sw ? [sw] : [];
+  }
+  function mergeCandidates(home, group) {
+    const memberIds = {};
+    groupMembersOf(home, group).forEach((m) => { memberIds[m.id] = true; });
+    const opts = [];
+    const seenG = {};
+    home.switches.filter(isSmart).forEach((s) => {
+      if (memberIds[s.id]) return;
+      if (s.groupId) {
+        if (seenG[s.groupId]) return;
+        seenG[s.groupId] = true;
+        const ms = home.switches.filter((x) => x.groupId === s.groupId);
+        const name = (s.load === "Other" ? (s.loadOther || "Other") : s.load) + " " + (wayBadge(effectiveOthers(s, home)) || wayLabel(ms.length));
+        opts.push({ id: s.id, label: name + " · " + ms.map((m) => roomNameOf(m, home)).join(", ") });
+      } else {
+        opts.push({ id: s.id, label: listLabel(s, home) });
+      }
+    });
+    return opts;
+  }
+  function summaryGroupHtml(g, home) {
+    const members = groupMembersOf(home, g);
+    const others = Math.max(0, (g.planned || g.n || members.length) - 1);
+    let html = `<div class="field-wrap" style="margin-bottom:14px"><p><strong>${esc(g.name)}</strong>${badgeHtml(others)}<br><span class="sub">${esc(g.way)} · ${esc(g.locs)}</span></p>`;
+    members.forEach((m, i) => {
+      html += `<div class="logged-row"><button type="button" class="list-item" data-edit="${m.id}"><strong>${i+1} of ${others+1} · ${esc(locPair(m.floor, roomNameOf(m, home)))}</strong><span>${esc(roleOf(m, home) === "Companion" ? "Extra switch" : "Main (smart)")}</span></button>${m.groupId ? `<button type="button" class="btn" data-unlink="${m.id}">Unlink</button>` : ""}</div>`;
+    });
+    const cands = mergeCandidates(home, g);
+    if (cands.length && members[0]) {
+      html += `<select data-merge-from="${members[0].id}"><option value="">Merge with…</option>` + cands.map((c) => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join("") + `</select>`;
+    }
+    if ((members.length >= 2 || g.n >= 2) && g.id) {
+      html += `<div class="row" style="margin-top:8px"><button type="button" class="btn" data-dissolve="${esc(g.id)}">Ungroup all</button></div>`;
+    }
+    html += `</div>`;
+    return html;
+  }
+  function mergeSwitches(fromId, toId) {
+    if (!fromId || !toId || fromId === toId) return;
+    const home = homeOf();
+    const a = home.switches.find((s) => s.id === fromId);
+    const b = home.switches.find((s) => s.id === toId);
+    if (!a || !b) return;
+    const idsA = a.groupId ? home.switches.filter((s) => s.groupId === a.groupId).map((s) => s.id) : [a.id];
+    const idsB = b.groupId ? home.switches.filter((s) => s.groupId === b.groupId).map((s) => s.id) : [b.id];
+    const ids = Array.from(new Set(idsA.concat(idsB)));
+    const groupId = a.groupId || b.groupId || uid("grp");
+    home.switches = home.switches.map((s) => ids.indexOf(s.id) === -1 ? s : { ...s, excludeIds: (s.excludeIds || []).filter((x) => ids.indexOf(x) === -1) });
+    home.switches = joinGroup(home.switches, ids, groupId);
+    const others = effectiveOthers(home.switches.find((s) => s.id === a.id), home);
+    setHome(home);
+    flash("Merged as a " + (others >= 2 ? "4-way" : "3-way") + ".");
+    render();
+  }
+  function dissolveGroup(groupId) {
+    const home = homeOf();
+    const members = home.switches.filter((s) => s.groupId === groupId);
+    if (!members.length) return;
+    const ids = members.map((s) => s.id);
+    home.switches = home.switches.map((s) => {
+      if (ids.indexOf(s.id) === -1) return s;
+      const ex = (s.excludeIds || []).concat(ids.filter((id) => id !== s.id)).filter((v, i, a) => a.indexOf(v) === i);
+      return { ...s, groupId: "", switchType: "single", groupPosition: 1, excludeIds: ex };
+    });
+    setHome(home); flash("Ungrouped."); render();
+  }
+  function ungroupedMergeHtml(home) {
+    const singles = home.switches.filter((s) => isSmart(s) && !s.groupId);
+    if (singles.length < 1) return "";
+    if (home.switches.filter(isSmart).length < 2) return "";
+    const blocks = singles.map((s) => {
+      const cands = mergeCandidates(home, { id: s.id });
+      if (!cands.length) return "";
+      return `<div class="field-wrap"><p><strong>${esc(listLabel(s, home))}</strong><br><span class="sub">${esc(locPair(s.floor, roomNameOf(s, home)))}</span></p><select data-merge-from="${s.id}"><option value="">Merge with…</option>` + cands.map((c) => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join("") + `</select></div>`;
+    }).filter(Boolean);
+    if (!blocks.length) return "";
+    return `<div class="card"><h2>Merge switches</h2><p class="hint">If two switches control the same light but were not grouped, merge them here.</p>${blocks.join("")}</div>`;
   }
   function renderSummary(home) {
     const { s, rows, notes } = orderRows(home);
@@ -815,7 +931,9 @@
     frag.innerHTML = `
       <div class="card"><label class="field">Home name</label><input type="text" id="homeName" placeholder="Name this house" value="${esc(home.name)}" autocomplete="off">
         <div class="field-wrap" style="margin-top:12px"><label class="field">Brand</label>${chipRow("brand", BRANDS, brandVal)}</div>
-        <p class="hint">Walk stays brand-neutral. Pick a brand when you are ready to order.</p></div>
+        <p class="hint">Walk stays brand-neutral. Pick a brand when you are ready to order.</p>
+        ${neutralsOverrideHtml(home)}
+        </div>
       <div class="summary-grid">
       <div class="card"><h2>Order list</h2>
         <table><thead><tr><th>Item</th><th>Qty</th><th>Part</th></tr></thead>
@@ -825,7 +943,8 @@
         <p class="hint">${s.dumb} regular (not smart) switch${s.dumb===1?"":"es"} (not ordered). ${s.locations} location${s.locations===1?"":"s"} logged.</p></div>
       <div class="summary-side">
       ${s.verifyOnSite && s.verifyOnSite.length ? `<div class="card"><h2>Verify on site</h2>${s.verifyOnSite.map((v)=>`<p><strong>${esc(v.name)}</strong><br><span class="sub">${esc(v.floor)} ${esc(v.room)} · ${esc(v.why)}</span></p>`).join("")}</div>` : ""}
-      ${s.groups.length ? `<div class="card"><h2>3-way and 4-way</h2>${s.groups.map((g)=>`<p><strong>${esc(g.name)}</strong>${badgeHtml(Math.max(0, (g.planned || g.n) - 1))}<br><span class="sub">${esc(g.way)} · ${esc(g.locs)}</span></p>`).join("")}<p class="hint">A 3-way is two locations (1 smart switch + 1 companion). A 4-way is three locations (1 smart switch + 2 companions). “Main” is a starting guess for the smart switch. The electrician confirms which box has the incoming power.</p></div>` : ""}
+      ${s.groups.length ? `<div class="card"><h2>3-way and 4-way</h2>${s.groups.map((g)=>summaryGroupHtml(g, home)).join("")}<p class="hint">Detected automatically from the same light. A 3-way is two locations (1 smart switch + 1 companion). A 4-way is three locations (1 smart switch + 2 companions). Unlink or merge here if a group is wrong. “Main” is a starting guess for the smart switch.</p></div>` : ""}
+      ${ungroupedMergeHtml(home)}
       ${s.issues.length ? `<div class="card"><h2>Open issues</h2>${s.issues.map((i)=>`<p>${esc(i)}</p>`).join("")}</div>` : ""}
       <div class="card"><h2>Export this home</h2><div class="stack">
         <button type="button" class="btn primary" id="exportJson">Export JSON backup</button>
@@ -965,6 +1084,8 @@
     document.getElementById("linkNo")?.addEventListener("click", rejectPending);
     document.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => editSwitch(b.getAttribute("data-edit"))));
     document.querySelectorAll("[data-unlink]").forEach((b) => b.addEventListener("click", () => unlinkSwitch(b.getAttribute("data-unlink"))));
+    document.querySelectorAll("[data-dissolve]").forEach((b) => b.addEventListener("click", () => dissolveGroup(b.getAttribute("data-dissolve"))));
+    document.querySelectorAll("select[data-merge-from]").forEach((el) => el.addEventListener("change", () => { if (el.value) mergeSwitches(el.getAttribute("data-merge-from"), el.value); }));
     document.getElementById("exportJson")?.addEventListener("click", () => download(fileName(homeOf(), "json"), exportJson({ version:1, kind:"ha-switch-survey", homes:[homeOf()], activeHomeId: homeOf().id }), "application/json"));
     document.getElementById("exportCsv")?.addEventListener("click", () => download(fileName(homeOf(), "csv"), orderCsv(homeOf()), "text/csv"));
     document.getElementById("exportAll")?.addEventListener("click", () => download("switch-survey-all.json", exportJson(state.store), "application/json"));
@@ -1036,6 +1157,7 @@
       gangSize: Number(d.gangSize) || 1, gangPosition: Number(d.gangPosition) || 1,
       loggedDumb: asDumb, note: d.note || "", kindOverride: d.kindOverride || "",
       fanType: d.fanType || "", otherSpots: Number(d.otherSpots) || 0,
+      excludeIds: (d.editId && (home.switches.find((s) => s.id === d.editId) || {}).excludeIds) || [],
       fixtureCount: Number(d.fixtureCount) || 0,
       lightFloor: (function () {
         if (!d.lightElsewhere) return "";
@@ -1060,20 +1182,45 @@
     if (!d.load) { flash("Choose a load."); return; }
     if (d.room === "Other" && !d.roomOther.trim()) { flash("Name the other room."); return; }
     if (d.load === "Other" && !d.loadOther.trim()) { flash("Name the other load."); return; }
-    if ((state.pendingMatch || d.groupId) && !effectiveLocation(d)) { flash("Pick where this paddle is."); return; }
     const rec = recordFromDraft(home, asDumb);
     if (d.editId) {
-      home.switches = home.switches.map((s) => s.id === rec.id ? { ...s, ...rec, groupId: s.groupId, switchType: s.switchType, groupPosition: s.groupPosition } : s);
+      const prev = home.switches.find((s) => s.id === rec.id);
+      rec.excludeIds = (prev && prev.excludeIds) || rec.excludeIds || [];
+      rec.groupId = (prev && prev.groupId) || rec.groupId || "";
+      home.switches = home.switches.map((s) => s.id === rec.id ? { ...s, ...rec } : s);
       if (asDumb && rec.groupId) home.switches = unlinkMember(home.switches, rec.id);
-      if (!asDumb && rec.groupId) home.switches = applyGroup(home.switches, rec.groupId);
+      if (!asDumb) {
+        const cur = home.switches.find((s) => s.id === rec.id) || rec;
+        if (cur.groupId) {
+          const members = home.switches.filter((s) => s.groupId === cur.groupId && s.id !== cur.id);
+          const still = members.filter((m) => groupKeyOf(m, home) === groupKeyOf(cur, home) && !isSplitPair(m, cur));
+          if (still.length !== members.length) home.switches = unlinkMember(home.switches, cur.id);
+        }
+        const now = home.switches.find((s) => s.id === rec.id) || rec;
+        if (!now.groupId) {
+          const matches = findMatches(home, now);
+          if (matches.length) {
+            const msg = autoJoinMatches(home, now, matches);
+            setHome(home); state.pendingMatch = null; flash(msg); resetDraftKeepRoom(); return;
+          }
+        } else {
+          home.switches = applyGroup(home.switches, now.groupId);
+        }
+      }
       setHome(home);
-      if (asDumb) { flash("Saved as a regular switch."); resetDraftKeepRoom(); return; }
-      state.pendingMatch = null; persist(); flash("Saved."); render(); return;
+      state.pendingMatch = null;
+      flash(asDumb ? "Saved as a regular switch." : "Saved.");
+      resetDraftKeepRoom();
+      return;
     }
     if (asDumb) { home.switches.push(rec); setHome(home); flash("Logged as a regular switch."); resetDraftKeepRoom(); return; }
+    home.switches.push(rec);
     const matches = findMatches(home, rec);
-    if (matches.length && !rec.groupId) { state.pendingMatch = { rec, matches }; persist(); render(); return; }
-    home.switches.push(rec); setHome(home); flash("Saved."); resetDraftKeepRoom();
+    if (matches.length) {
+      const msg = autoJoinMatches(home, rec, matches);
+      setHome(home); state.pendingMatch = null; flash(msg); resetDraftKeepRoom(); return;
+    }
+    setHome(home); state.pendingMatch = null; flash("Saved."); resetDraftKeepRoom();
   }
   function linkPending() {
     const pending = state.pendingMatch; if (!pending) return;
@@ -1110,6 +1257,7 @@
     state.draft = emptyDraft(d.floor, d.room);
     state.draft.roomOther = d.roomOther;
     state.pendingMatch = null;
+    state.moreOpen = false;
     persist(); render();
   }
   function editSwitch(id) {
@@ -1131,7 +1279,7 @@
       lightRoomOther: (sw.lightRoom && !ROOMS.includes(sw.lightRoom)) ? sw.lightRoom : "",
       groupId: sw.groupId || ""
     };
-    state.moreOpen = Boolean(sw.note || Number(sw.gangSize) > 1 || Number(sw.gangPosition) > 1);
+    state.moreOpen = Boolean(sw.note || Number(sw.gangSize) > 1 || Number(sw.gangPosition) > 1 || (!sw.groupId && Number(sw.otherSpots) > 0) || sw.location);
     persist(); render();
     window.scrollTo(0, 0);
   }
@@ -1208,6 +1356,7 @@
           state.store.homes.push(h);
         });
         if (data.homes[0]) state.store.activeHomeId = data.homes[0].id;
+        migrateHomes(state.store);
         persist(); flash("Imported " + data.homes.length + " home" + (data.homes.length===1?"":"s") + "."); render();
       } catch { flash("That file is not a Switch Survey JSON backup."); render(); }
     };
