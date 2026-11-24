@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Switch Survey</title>
+  <meta name="application-name" content="Switch Survey">
+  <meta name="apple-mobile-web-app-title" content="Switch Survey">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f3f1ea">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="description" content="Private switch walk survey.">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f3f1ea; --paper: #fff; --ink: #161616; --muted: #5c5c5c; --line: #d9d6cc;
+      --accent: #1f4e79; --accent-ink: #fff; --chip: #ece9e0; --chip-on: #1f4e79; --chip-on-ink: #fff;
+      --warn: #8a5a00; --warn-bg: #f7e7c1; --danger: #8b1e1e; --danger-bg: #f8d7d4;
+      --ok: #1d5c3a; --ok-bg: #d8eee1; --auto: #ececec; --auto-ink: #3d3d3d;
+      --shadow: 0 1px 2px rgba(0,0,0,.06); --radius: 14px; --tap: 48px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111; --paper: #1c1c1e; --ink: #f2f2f2; --muted: #b0b0b0; --line: #3a3a3c;
+        --accent: #7eb6e8; --accent-ink: #0e1a24; --chip: #2c2c2e; --chip-on: #7eb6e8; --chip-on-ink: #0e1a24;
+        --warn: #f0c36a; --warn-bg: #3a2d12; --danger: #ff8a80; --danger-bg: #3a1616;
+        --ok: #8fdfb0; --ok-bg: #163024; --auto: #2a2a2c; --auto-ink: #c8c8c8;
+        --shadow: 0 1px 2px rgba(0,0,0,.4);
+      }
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; min-height: 100%; }
+    body { padding: calc(12px + env(safe-area-inset-top)) 14px calc(28px + env(safe-area-inset-bottom)); max-width: 430px; margin: 0 auto; }
+    h1 { font-size: 1.45rem; margin: 0 0 4px; letter-spacing: -.02em; }
+    h2 { font-size: 1.05rem; margin: 0 0 10px; }
+    p, .hint { color: var(--muted); font-size: .92rem; margin: 0 0 10px; }
+    button, select, input, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .topbar { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+    .sub { color: var(--muted); font-size: .82rem; }
+    .card { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin: 0 0 12px; box-shadow: var(--shadow); }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    label.field { display: block; font-size: .78rem; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
+    .field-wrap { margin: 0 0 12px; }
+    select, input[type=text], input[type=number], textarea { width: 100%; min-height: var(--tap); border: 1.5px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--ink); padding: 10px 12px; font-size: 16px; }
+    textarea { min-height: 72px; resize: vertical; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { appearance: none; border: 1.5px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 999px; min-height: 44px; padding: 8px 14px; font-weight: 600; }
+    .chip[aria-pressed="true"] { background: var(--chip-on); color: var(--chip-on-ink); border-color: var(--chip-on); }
+    .btn { appearance: none; border: 1.5px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 12px; min-height: var(--tap); padding: 10px 14px; font-weight: 650; flex: 1 1 auto; }
+    .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+    .btn.danger { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
+    .btn.quiet { background: transparent; }
+    .btn:disabled { opacity: .45; }
+    .tabs { display: flex; gap: 6px; margin: 0 0 12px; }
+    .tabs .btn { flex: 1; }
+    .tabs .btn[aria-current="page"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+    .banner { border-radius: 12px; padding: 10px 12px; margin: 0 0 12px; }
+    .banner.warn { background: var(--warn-bg); color: var(--warn); }
+    .banner.ok { background: var(--ok-bg); color: var(--ok); }
+    .banner.danger { background: var(--danger-bg); color: var(--danger); }
+    .list-item { width: 100%; text-align: left; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 12px; padding: 10px 12px; min-height: 52px; }
+    .list-item strong { display: block; }
+    .list-item span { color: var(--muted); font-size: .85rem; }
+    .auto { background: var(--auto); color: var(--auto-ink); font-size: .82rem; padding: 8px 10px; border-radius: 10px; margin: 0 0 10px; }
+    .mw { background: color-mix(in srgb, var(--accent) 14%, var(--paper)); border-color: var(--accent); }
+    .dumb { opacity: .72; }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+    th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; }
+    .lock { min-height: 100svh; display: flex; flex-direction: column; justify-content: center; }
+    .dots { display: flex; justify-content: center; gap: 10px; margin: 8px 0 18px; min-height: 18px; }
+    .dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); }
+    .dot.on { background: var(--accent); border-color: var(--accent); }
+    .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 320px; margin: 0 auto 16px; }
+    .key { appearance: none; height: 64px; border-radius: 16px; border: 1.5px solid var(--line); background: var(--paper); color: var(--ink); font-size: 1.45rem; font-weight: 650; }
+    .hidden { display: none !important; }
+    .stack { display: flex; flex-direction: column; gap: 8px; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+
+(() => {
+  const META_KEY = "switchSurvey.meta.v1";
+  const IDLE_MS = 5 * 60 * 1000;
+  const ITERATIONS = 150000;
+  const FLOORS = ["Basement","Main","Upper","Exterior"];
+  const ROOMS = ["Basement","Bedroom","Closet","Dining room","Exterior","Family room","Foyer","Garage","Guest bath","Half bath","Hall","Kitchen","Laundry","Living room","Office","Primary bath","Primary bedroom","Stairs","Other"];
+  const LOADS = ["Can lights","Ceiling fan","Chandelier","Closet light","Exhaust fan","Exterior lights","Fan + light","Flood lights","Lamp outlet","Pendants","Sconces","Under-cabinet","Vanity light","Wafer lights","Other"];
+  const QUALIFIERS = ["Left","Right","Front","Back","Upper","Lower","1","2","3","4"];
+  const LOCATIONS = ["Entry","Hall","Top of stairs","Bottom of stairs","Garage door","Back door","Bedside","Other"];
+  const BRANDS = ["Undecided","Inovelli","Lutron Caseta"];
+  const NEUTRALS = [
+    { value: "yes", label: "Most have a neutral" },
+    { value: "no", label: "Most do not" },
+    { value: "mixed", label: "Mixed" },
+    { value: "unknown", label: "Not sure" }
+  ];
+  const state = {
+    locked: true, setup: false, pinBuf: "", pinAgain: "", setupStep: 1,
+    unlockError: "", forgot: 0, key: null, store: null, tab: "walk",
+    draft: emptyDraft("Main", ""), pendingMatch: null, moreOpen: false, flash: ""
+  };
+  let lastHidden = 0;
+
+  function uid(prefix) { return prefix + "_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
+  function blankHome() { return { id: uid("home"), name: "", brand: "undecided", neutrals: "unknown", rooms: [], switches: [], isExample: false }; }
+  function emptyDraft(floor, room) {
+    return { editId: "", floor: floor || "Main", room: room || "", roomOther: "", load: "", loadOther: "", qualifier: "", location: "", locationOther: "", gangSize: 1, gangPosition: 1, loggedDumb: false, note: "", kindOverride: "", groupId: "" };
+  }
+  function defaultStore() { const home = blankHome(); return { version: 1, kind: "ha-switch-survey", homes: [home], activeHomeId: home.id }; }
+  function homeOf() { const s = state.store; return s.homes.find((h) => h.id === s.activeHomeId) || s.homes[0]; }
+  function setHome(next) { const s = state.store; s.homes = s.homes.map((h) => h.id === next.id ? next : h); persist(); }
+  function effectiveLoad(d) { return d.load === "Other" ? (d.loadOther || "Other").trim() : d.load; }
+  function effectiveRoom(d) { return d.room === "Other" ? (d.roomOther || "Other").trim() : d.room; }
+  function effectiveLocation(d) { return d.location === "Other" ? (d.locationOther || "").trim() : d.location; }
+  function locLabel(sw) {
+    if (sw.location === "Other") return (sw.locationOther || "Other").trim();
+    return sw.location || "";
+  }
+  function kindForLoad(load) {
+    if (load === "Ceiling fan" || load === "Fan + light") return "fan";
+    if (["Exhaust fan","Closet light","Flood lights","Exterior lights","Lamp outlet"].includes(load)) return "onoff";
+    return "dimmer";
+  }
+  function kindLabel(k) { return k === "fan" ? "Fan" : k === "onoff" ? "On/off" : "Dimmer"; }
+  function groupKeyOf(sw) {
+    const load = sw.load === "Other" ? "Other" : sw.load;
+    const extra = load === "Other" ? "|" + (sw.loadOther || sw.note || "").trim() : "";
+    return (sw.floor || "") + "|" + load + "|" + (sw.qualifier || "") + extra;
+  }
+  function displayName(sw, roomName) {
+    const load = sw.load === "Other" ? (sw.loadOther || "Other") : sw.load;
+    const q = sw.qualifier || "";
+    if (/^[1-4]$/.test(q)) return [sw.floor, roomName, q, load].filter(Boolean).join(" ");
+    return [sw.floor, roomName, load, q].filter(Boolean).join(" ");
+  }
+  function roomNameOf(sw, home) { const r = (home.rooms || []).find((x) => x.id === sw.roomId); return r ? r.name : ""; }
+  function isSmart(sw) { return sw.loggedDumb !== true; }
+  function shopKind(sw) {
+    if (sw.loggedDumb && !sw.groupId) return "dumb";
+    if (sw.kindOverride) return sw.kindOverride;
+    return kindForLoad(sw.load === "Other" ? (sw.loadOther || "") : sw.load);
+  }
+  function findMatches(home, rec) {
+    const key = groupKeyOf(rec);
+    return home.switches.filter((s) => s.id !== rec.id && isSmart(s) && groupKeyOf(s) === key && s.floor === rec.floor);
+  }
+  function applyGroup(switches, groupId) {
+    const members = switches.filter((s) => s.groupId === groupId);
+    const typ = members.length >= 3 ? "4way" : members.length === 2 ? "3way" : "single";
+    return switches.map((s) => {
+      if (s.groupId !== groupId) return s;
+      const idx = members.findIndex((m) => m.id === s.id);
+      return { ...s, switchType: typ, groupPosition: idx + 1, loggedDumb: false };
+    });
+  }
+  function joinGroup(switches, ids, groupId) {
+    return applyGroup(switches.map((s) => ids.includes(s.id) ? { ...s, groupId, loggedDumb: false } : s), groupId);
+  }
+  function unlinkMember(switches, id) {
+    const sw = switches.find((s) => s.id === id);
+    if (!sw || !sw.groupId) return switches;
+    const gid = sw.groupId;
+    let next = switches.map((s) => s.id === id ? { ...s, groupId: "", switchType: "single", groupPosition: 1 } : s);
+    const left = next.filter((s) => s.groupId === gid);
+    if (left.length < 2) next = next.map((s) => s.groupId === gid ? { ...s, groupId: "", switchType: "single", groupPosition: 1 } : s);
+    else next = applyGroup(next, gid);
+    return next;
+  }
+  function roleOf(sw, home) {
+    if (!isSmart(sw) && !sw.groupId) return "";
+    if (!sw.groupId) return "Main";
+    const members = home.switches.filter((s) => s.groupId === sw.groupId);
+    return members[0] && members[0].id === sw.id ? "Main" : "Companion";
+  }
+  function wayLabel(n) { return n >= 3 ? "4-way" : n === 2 ? "3-way" : "Single"; }
+  function skuFor(brand, kind) {
+    if (brand === "inovelli") return kind === "fan" ? "VZM35-SN" : kind === "companion" ? "AUX01" : "VZM31-SN";
+    if (brand === "caseta") return ({ dimmer: "PD-6WCL", onoff: "PD-5ANS", fan: "PD-FSQN", companion: "Pico PJ2-3BRL" })[kind] || "";
+    return "";
+  }
+  function plateName(brand, gang) { return brand === "caseta" ? "Claro " + gang + "-gang" : gang + "-gang wallplate"; }
+  function summaryOf(home) {
+    const shopped = home.switches.filter((s) => isSmart(s) || s.groupId);
+    let dimmer = 0, onoff = 0, fan = 0, companion = 0, dumb = 0;
+    home.switches.forEach((s) => {
+      if (!isSmart(s) && !s.groupId) { dumb++; return; }
+      if (roleOf(s, home) === "Companion") companion++;
+      else { const k = shopKind(s); if (k === "fan") fan++; else if (k === "onoff") onoff++; else dimmer++; }
+    });
+    const plates = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    const buckets = {};
+    shopped.forEach((s) => {
+      const g = Number(s.gangSize) || 1;
+      const key = s.floor + "|" + roomNameOf(s, home) + "|" + g;
+      buckets[key] = (buckets[key] || 0) + 1;
+    });
+    Object.keys(buckets).forEach((key) => {
+      const g = Number(key.split("|").pop()) || 1;
+      plates[g] = (plates[g] || 0) + Math.ceil(buckets[key] / g);
+    });
+    const groupIds = Array.from(new Set(home.switches.map((s) => s.groupId).filter(Boolean)));
+    const groups = groupIds.map((id) => {
+      const members = home.switches.filter((s) => s.groupId === id);
+      const first = members[0];
+      const load = first.load === "Other" ? (first.loadOther || "Other") : first.load;
+      const locs = members.map((m) => roomNameOf(m, home) + (locLabel(m) ? " (" + locLabel(m) + ")" : "")).join("; ");
+      return { id, name: load, way: wayLabel(members.length), locs, n: members.length };
+    }).filter((g) => g.n >= 2);
+    const issues = [];
+    if (home.neutrals === "unknown") issues.push("House neutrals have not been spot-checked. Check a few boxes before ordering on/off or fan devices.");
+    else if (home.neutrals === "no") issues.push(home.brand === "caseta"
+      ? "Most boxes do not have a neutral. Caseta dimmers usually do not need a bypass; Caseta on/off and fan controls need a neutral."
+      : home.brand === "inovelli"
+        ? "Most boxes do not have a neutral. Inovelli dimmers can work without one; plan LED bypasses at small LED fixtures. On/off mode may need a neutral."
+        : "Most boxes do not have a neutral. Most dimmers can work without one; on/off and some fan models often need one.");
+    else if (home.neutrals === "mixed") issues.push("Neutrals are mixed. Confirm boxes for on/off and fan devices, and whether Inovelli dimmers on small LED loads need a bypass.");
+    if (groups.length) issues.push("Confirm traveler wiring and which box has line for " + groups.length + " multi-way group" + (groups.length === 1 ? "" : "s") + ". Put the smart main where line and, if possible, a neutral arrive.");
+    return { dimmer, onoff, fan, companion, dumb, plates, groups, issues, locations: home.switches.length };
+  }
+  function orderRows(home) {
+    const brand = home.brand, s = summaryOf(home), rows = [];
+    const add = (label, qty, kind) => {
+      if (!qty) return;
+      const part = kind === "plate" ? plateName(brand, label.split("-")[0]) : (skuFor(brand, kind) || (brand === "undecided" ? "Pick a brand for SKU" : label));
+      rows.push({ item: label, qty, part });
+    };
+    add("Smart dimmer", s.dimmer, "dimmer");
+    add("Smart on/off", s.onoff, "onoff");
+    add("Smart fan", s.fan, "fan");
+    add("Companion", s.companion, "companion");
+    [1,2,3,4].forEach((g) => add(g + "-gang wallplate", s.plates[g], "plate"));
+    return { s, rows };
+  }
+  function csvEscape(v) { const t = String(v ?? ""); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }
+  function orderCsv(home) {
+    const { s, rows } = orderRows(home);
+    const lines = [csvEscape("Switch Survey — " + (home.name || "Untitled home")),
+      ["Brand", home.brand === "caseta" ? "Lutron Caseta" : home.brand === "inovelli" ? "Inovelli" : "Undecided"].map(csvEscape).join(","),
+      ["Locations", String(s.locations)].map(csvEscape).join(","), "", "SHOPPING LIST", "Item,Qty,Part"];
+    rows.forEach((r) => lines.push([r.item, r.qty, r.part].map(csvEscape).join(",")));
+    if (!rows.length) lines.push("None yet,0,");
+    lines.push("", "BY FLOOR / ROOM", "Floor,Room,Name,Plan,Gang,Location,Note");
+    (home.rooms || []).forEach((room) => {
+      home.switches.filter((sw) => sw.roomId === room.id).forEach((sw) => {
+        const plan = sw.groupId ? wayLabel(home.switches.filter((x) => x.groupId === sw.groupId).length) + " " + roleOf(sw, home) : (sw.loggedDumb ? "Dumb" : "Smart " + kindLabel(shopKind(sw)));
+        lines.push([room.floor, room.name, displayName(sw, room.name), plan, sw.gangSize + " pos " + sw.gangPosition, locLabel(sw), sw.note || ""].map(csvEscape).join(","));
+      });
+    });
+    if (s.groups.length) { lines.push("", "MULTI-WAY GROUPS", "Load,Way,Locations"); s.groups.forEach((g) => lines.push([g.name, g.way, g.locs].map(csvEscape).join(","))); }
+    if (s.issues.length) { lines.push("", "OPEN ISSUES"); s.issues.forEach((i) => lines.push(csvEscape(i))); }
+    return lines.join("\n");
+  }
+  function exportJson(store) { return JSON.stringify({ version: 1, kind: "ha-switch-survey", homes: store.homes, activeHomeId: store.activeHomeId }, null, 2); }
+
+  const EXAMPLE = [
+    ["Main","Foyer","Other","","Bottom of stairs",2,1,"","Stair lights"],
+    ["Main","Foyer","Exterior lights","","Entry",2,2,"",""],
+    ["Main","Living room","Can lights","","",3,1,"",""],
+    ["Main","Living room","Sconces","","",3,2,"",""],
+    ["Main","Living room","Lamp outlet","","",3,3,"",""],
+    ["Main","Living room","Exterior lights","","Back door",1,1,"",""],
+    ["Main","Dining room","Chandelier","","",1,1,"",""],
+    ["Main","Kitchen","Pendants","","",3,1,"",""],
+    ["Main","Kitchen","Under-cabinet","","",3,2,"",""],
+    ["Main","Kitchen","Can lights","","",3,3,"",""],
+    ["Main","Kitchen","Other","","",1,1,"","Disposal"],
+    ["Main","Half bath","Vanity light","","",1,1,"",""],
+    ["Main","Hall","Other","","Hall",2,1,"","Stair lights"],
+    ["Main","Hall","Wafer lights","","",2,2,"",""],
+    ["Main","Stairs","Other","","Top of stairs",1,1,"","Stair lights"],
+    ["Main","Office","Can lights","","",1,1,"",""],
+    ["Main","Laundry","Can lights","","",1,1,"Dumb",""],
+    ["Main","Other","Can lights","","",1,1,"","Mudroom"],
+    ["Main","Garage","Can lights","","Other",1,1,"","Inside garage"],
+    ["Main","Garage","Can lights","","Garage door",1,1,"",""],
+    ["Main","Closet","Closet light","","",1,1,"Dumb",""],
+    ["Main","Family room","Can lights","","",2,1,"",""],
+    ["Main","Family room","Sconces","","",2,2,"",""],
+    ["Exterior","Exterior","Flood lights","","",1,1,"",""],
+    ["Exterior","Exterior","Other","","",1,1,"","Landscape lights"],
+    ["Upper","Hall","Wafer lights","","Hall",1,1,"",""],
+    ["Upper","Hall","Closet light","","",1,1,"Dumb",""],
+    ["Upper","Primary bedroom","Fan + light","","",2,1,"",""],
+    ["Upper","Primary bedroom","Can lights","","",2,2,"",""],
+    ["Upper","Primary bedroom","Lamp outlet","","Bedside",1,1,"",""],
+    ["Upper","Primary bedroom","Wafer lights","","Hall",1,1,"",""],
+    ["Upper","Primary bath","Vanity light","","",3,1,"",""],
+    ["Upper","Primary bath","Can lights","","",3,2,"",""],
+    ["Upper","Primary bath","Exhaust fan","","",3,3,"",""],
+    ["Upper","Bedroom","Can lights","2","",1,1,"",""],
+    ["Upper","Bedroom","Closet light","2","",1,1,"Dumb",""],
+    ["Upper","Bedroom","Can lights","3","",1,1,"",""],
+    ["Upper","Bedroom","Closet light","3","",1,1,"Dumb",""],
+    ["Upper","Guest bath","Vanity light","","",2,1,"",""],
+    ["Upper","Guest bath","Exhaust fan","","",2,1,"",""]
+  ];
+  const EXAMPLE_GROUPS = [
+    { load: "Other", other: "Stair lights", floor: "Main", loc: ["Bottom of stairs","Hall","Top of stairs"] },
+    { load: "Exterior lights", other: "", floor: "Main", loc: ["Entry","Back door"] },
+    { load: "Can lights", other: "", floor: "Main", loc: ["Other","Garage door"] },
+    { load: "Wafer lights", other: "", floor: "Upper", loc: ["Hall","Hall"] }
+  ];
+  function buildExampleHome() {
+    const home = blankHome();
+    home.name = "EXAMPLE — Two-story house";
+    home.brand = "undecided";
+    home.neutrals = "mixed";
+    home.isExample = true;
+    const roomMap = {};
+    EXAMPLE.forEach((row) => {
+      const key = row[0] + "|" + row[1];
+      if (!roomMap[key]) { const rec = { id: uid("room"), name: row[1], floor: row[0] }; roomMap[key] = rec; home.rooms.push(rec); }
+    });
+    home.switches = EXAMPLE.map((row, i) => {
+      const [floor, room, load, qualifier, location, gang, pos, smart, note] = row;
+      const r = roomMap[floor + "|" + room];
+      return {
+        id: "exs_" + (i + 1), roomId: r.id, floor, load,
+        loadOther: load === "Other" ? note : "", qualifier, location,
+        locationOther: location === "Other" ? (note || "") : "",
+        gangSize: gang, gangPosition: pos, loggedDumb: smart === "Dumb",
+        note: (load === "Other" || room === "Other" || note === "Inside garage") ? note : (note || ""),
+        kindOverride: "", groupId: "", switchType: "single", groupPosition: 1
+      };
+    });
+    EXAMPLE_GROUPS.forEach((g, gi) => {
+      const ids = [];
+      home.switches.forEach((sw) => {
+        const other = sw.load === "Other" ? (sw.loadOther || "") : "";
+        if (sw.floor === g.floor && sw.load === g.load && other === g.other && !sw.loggedDumb && g.loc.includes(sw.location) && ids.length < g.loc.length) {
+          if (sw.location === g.loc[ids.length]) ids.push(sw.id);
+        }
+      });
+      if (ids.length >= 2) home.switches = joinGroup(home.switches, ids, "exg_" + gi);
+    });
+    return home;
+  }
+
+  function b64(buf) {
+    const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
+    let s = ""; bytes.forEach((b) => { s += String.fromCharCode(b); }); return btoa(s);
+  }
+  function unb64(str) {
+    const s = atob(str); const out = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i); return out;
+  }
+  async function deriveKey(pin, salt) {
+    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pin), "PBKDF2", false, ["deriveKey"]);
+    return crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: ITERATIONS, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt","decrypt"]);
+  }
+  async function encryptJson(key, obj) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(obj)));
+    return { iv: b64(iv), ct: b64(ct) };
+  }
+  async function decryptJson(key, payload) {
+    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(payload.iv) }, key, unb64(payload.ct));
+    return JSON.parse(new TextDecoder().decode(pt));
+  }
+  function readMeta() { try { return JSON.parse(localStorage.getItem(META_KEY) || "null"); } catch { return null; } }
+  function hasPin() { const m = readMeta(); return Boolean(m && m.salt && m.check); }
+  async function persist() {
+    if (!state.key || !state.store) return;
+    try {
+      const enc = await encryptJson(state.key, { store: state.store, tab: state.tab, draft: state.draft, pendingMatch: state.pendingMatch });
+      const meta = readMeta() || {};
+      meta.data = enc;
+      localStorage.setItem(META_KEY, JSON.stringify(meta));
+    } catch (err) {
+      state.flash = "Could not save to this browser. Your latest change is on screen only.";
+      render();
+    }
+  }
+  async function setNewPin(pin) {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const key = await deriveKey(pin, salt);
+    const check = await encryptJson(key, { ok: true, kind: "ha-switch-survey" });
+    localStorage.setItem(META_KEY, JSON.stringify({ v: 1, salt: b64(salt), iterations: ITERATIONS, check }));
+    state.key = key;
+    if (!state.store) state.store = defaultStore();
+    await persist();
+    state.locked = false; state.setup = false; state.pinBuf = ""; state.pinAgain = "";
+  }
+  async function tryUnlock(pin) {
+    const meta = readMeta();
+    if (!meta) return false;
+    try {
+      const key = await deriveKey(pin, unb64(meta.salt));
+      await decryptJson(key, meta.check);
+      const bundle = meta.data ? await decryptJson(key, meta.data) : { store: defaultStore() };
+      state.key = key;
+      state.store = bundle.store && bundle.store.homes ? bundle.store : defaultStore();
+      if (!state.store.homes.length) state.store = defaultStore();
+      state.tab = bundle.tab || "walk";
+      state.draft = bundle.draft || emptyDraft("Main", "");
+      state.pendingMatch = bundle.pendingMatch || null;
+      state.locked = false; state.unlockError = ""; state.pinBuf = "";
+      return true;
+    } catch { return false; }
+  }
+  function lockNow() { state.key = null; state.locked = true; state.pinBuf = ""; state.unlockError = ""; state.forgot = 0; render(); }
+  function resetAllData() {
+    localStorage.removeItem(META_KEY);
+    state.key = null; state.store = null; state.draft = emptyDraft("Main", ""); state.pendingMatch = null;
+    state.tab = "walk"; state.setup = true; state.setupStep = 1; state.pinBuf = ""; state.pinAgain = ""; state.forgot = 0; state.locked = true;
+  }
+  function applyChrome() {
+    const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+    const color = dark ? "#111111" : "#f3f1ea";
+    let dyn = document.querySelector("meta[name='theme-color'][data-live]");
+    if (!dyn) { dyn = document.createElement("meta"); dyn.setAttribute("name","theme-color"); dyn.setAttribute("data-live","1"); document.head.appendChild(dyn); }
+    dyn.content = color;
+    const bar = document.querySelector("meta[name='apple-mobile-web-app-status-bar-style']");
+    if (bar) bar.content = dark ? "black-translucent" : "default";
+    document.documentElement.style.background = color;
+    document.body.style.background = color;
+  }
+  function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c])); }
+  function chipRow(name, values, current) {
+    return `<div class="chips" data-field="${name}">` + values.map((v) => `<button type="button" class="chip" data-value="${esc(v)}" aria-pressed="${current===v?"true":"false"}">${esc(v)}</button>`).join("") + `</div>`;
+  }
+  function selectField(label, name, values, current) {
+    const opts = [["","Choose…"]].concat(values.map((v) => [v,v]));
+    return `<div class="field-wrap"><label class="field">${esc(label)}</label><select data-field="${name}">` + opts.map(([v,l]) => `<option value="${esc(v)}" ${current===v?"selected":""}>${esc(l)}</option>`).join("") + `</select></div>`;
+  }
+
+  function render() {
+    applyChrome();
+    const root = document.getElementById("app");
+    if (state.locked || !state.store) { root.replaceChildren(renderLock()); bindLock(); return; }
+    root.replaceChildren(renderMain());
+    bindMain();
+  }
+  function renderLock() {
+    const setup = state.setup || !hasPin();
+    const title = setup ? (state.setupStep === 1 ? "Set a PIN" : "Confirm your PIN") : "Enter PIN";
+    const hint = setup
+      ? (state.setupStep === 1 ? "Choose a 4–6 digit PIN for this phone. It is not uploaded anywhere." : "Enter the same PIN once more.")
+      : "This survey is locked on this device.";
+    const buf = setup && state.setupStep === 2 ? state.pinAgain : state.pinBuf;
+    const dots = Array.from({ length: Math.max(4, buf.length) }, (_, i) => `<span class="dot ${i < buf.length ? "on" : ""}"></span>`).join("");
+    const keys = ["1","2","3","4","5","6","7","8","9","Del","0","OK"];
+    let extra = "";
+    if (setup && hasPin() && state.store) extra += `<button type="button" class="btn quiet" id="cancelSetup">Cancel</button>`;
+    if (state.unlockError) extra += `<div class="banner danger">${esc(state.unlockError)}</div>`;
+    if (!setup && state.forgot === 0) extra += `<button type="button" class="btn quiet" id="forgot">Forgot PIN</button>`;
+    if (state.forgot === 1) extra += `<div class="banner warn">Resetting the PIN will erase all Switch Survey data on this phone. You cannot export while locked. If you already have a JSON backup, you can import it after you set a new PIN. This cannot recover data without the current PIN or a backup.</div><div class="row"><button type="button" class="btn" id="forgotCancel">Cancel</button><button type="button" class="btn danger" id="forgotWarn">I understand, continue</button></div>`;
+    if (state.forgot === 2) extra += `<div class="banner danger">Last step: erase all homes on this phone and set a new PIN?</div><div class="row"><button type="button" class="btn" id="forgotCancel">Cancel</button><button type="button" class="btn danger" id="forgotConfirm">Erase and reset PIN</button></div>`;
+    const wrap = document.createElement("div");
+    wrap.className = "lock";
+    wrap.innerHTML = `<div class="topbar"><div><h1>Switch Survey</h1><div class="sub">${esc(hint)}</div></div></div><div class="card"><h2>${esc(title)}</h2><div class="dots">${dots}</div><div class="keypad" id="keypad">${keys.map((k) => `<button type="button" class="key" data-key="${esc(k)}">${k}</button>`).join("")}</div>${extra}</div>`;
+    return wrap;
+  }
+  function renderMain() {
+    const home = homeOf();
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `<div class="topbar"><div><h1>Switch Survey</h1><div class="sub">${home.isExample ? "EXAMPLE DATA · " : ""}${esc(home.name || "Name this home")} · ${home.switches.length} location${home.switches.length===1?"":"s"}</div></div></div>
+      <div class="tabs" role="tablist">
+        <button type="button" class="btn" data-tab="walk" aria-current="${state.tab==="walk"?"page":"false"}">Walk</button>
+        <button type="button" class="btn" data-tab="summary" aria-current="${state.tab==="summary"?"page":"false"}">Summary${home.switches.length? " · "+home.switches.length:""}</button>
+        <button type="button" class="btn" data-tab="homes" aria-current="${state.tab==="homes"?"page":"false"}">Homes</button>
+      </div>
+      ${state.flash ? `<div class="banner ok">${esc(state.flash)}</div>` : ""}
+      <div id="main"></div>`;
+    wrap.querySelector("#main").append(state.tab === "summary" ? renderSummary(home) : state.tab === "homes" ? renderHomes(home) : renderWalk(home));
+    return wrap;
+  }
+  function renderWalk(home) {
+    const d = state.draft;
+    const derived = d.load ? kindForLoad(d.load === "Other" ? "Other" : d.load) : "";
+    const useKind = d.kindOverride || derived;
+    const showLoc = Boolean(state.pendingMatch || d.groupId);
+    const preview = displayName({ floor: d.floor, load: d.load, loadOther: d.loadOther, qualifier: d.qualifier }, effectiveRoom(d) || "Room");
+    let matchHtml = "";
+    if (state.pendingMatch) {
+      const m = state.pendingMatch.matches[0];
+      const room = roomNameOf(m, home);
+      matchHtml = `<div class="card mw"><p>Same light as ${esc(displayName(m, room))} in ${esc(m.floor + " " + room)}? Link as a multi-way.</p><div class="row"><button type="button" class="btn primary" id="linkYes">Link</button><button type="button" class="btn" id="linkNo">Different load</button></div></div>`;
+    }
+    const frag = document.createElement("div");
+    frag.innerHTML = `
+      <div class="card"><label class="field">Home name</label><input type="text" id="homeName" placeholder="Name this house" value="${esc(home.name)}" autocomplete="off"></div>
+      <div class="card"><label class="field">Neutrals in this house</label><div class="chips" data-field="neutrals"></div><p class="hint">Spot-check a few boxes. You do not need a neutral at every switch.</p></div>
+      ${matchHtml}
+      <div class="card">
+        <h2>${d.editId ? (d.loggedDumb ? "Upgrade dumb switch" : "Edit switch") : "Add a switch"}</h2>
+        <p class="hint">Pick floor, room, and load, then gang size, and save. Reuse the same load at the other end of a 3-way. Floor and room stay put after you save.</p>
+        <div class="field-wrap"><label class="field">Floor</label>${chipRow("floor", FLOORS, d.floor)}</div>
+        ${selectField("Room", "room", ROOMS, d.room)}
+        ${d.room==="Other" ? `<div class="field-wrap"><label class="field">Room name</label><input type="text" data-field="roomOther" value="${esc(d.roomOther)}" placeholder="Mudroom"></div>` : ""}
+        ${selectField("Load", "load", LOADS, d.load)}
+        ${d.load==="Other" ? `<div class="field-wrap"><label class="field">Load name</label><input type="text" data-field="loadOther" value="${esc(d.loadOther)}" placeholder="Stair lights"></div>` : ""}
+        <div class="field-wrap"><label class="field">Qualifier, optional</label>${chipRow("qualifier", QUALIFIERS, d.qualifier)}</div>
+        ${d.load ? `<div class="auto">${esc(preview)} · orders as a ${esc(kindLabel(useKind || "dimmer"))}.</div>` : ""}
+        ${showLoc ? `<div class="field-wrap"><label class="field">Paddle location, for this multi-way</label>${chipRow("location", LOCATIONS, d.location)}</div>` : ""}
+        ${showLoc && d.location==="Other" ? `<div class="field-wrap"><label class="field">Custom location</label><input type="text" data-field="locationOther" value="${esc(d.locationOther)}" placeholder="Landing"></div>` : ""}
+        <div class="field-wrap"><label class="field">Switches in this box</label>${chipRow("gangSize", ["1","2","3","4"], String(d.gangSize))}</div>
+        ${d.gangSize > 1 ? `<div class="field-wrap"><label class="field">Position, left to right</label>${chipRow("gangPosition", Array.from({length:d.gangSize},(_,i)=>String(i+1)), String(d.gangPosition))}</div>` : ""}
+        <button type="button" class="btn" id="moreToggle">${state.moreOpen ? "Hide more" : "More"}</button>
+        <div id="more" class="${state.moreOpen ? "" : "hidden"}" style="margin-top:12px">
+          <div class="field-wrap"><label class="field">Device type, if the load is wrong</label>${chipRow("kindOverride", ["dimmer","onoff","fan"], d.kindOverride || useKind)}</div>
+          <div class="field-wrap"><label class="field">Note, optional</label><textarea data-field="note" placeholder="Traveler colors, leftover questions">${esc(d.note)}</textarea></div>
+        </div>
+        <div class="stack" style="margin-top:12px">
+          <button type="button" class="btn" id="logDumb">Log as dumb (quick)</button>
+          <button type="button" class="btn primary" id="saveSw">${d.editId ? (d.loggedDumb ? "Save as smart" : "Save changes") : "Save switch"}</button>
+          <div class="row">
+            <button type="button" class="btn" id="clearDraft">Clear for next switch</button>
+            ${d.editId ? `<button type="button" class="btn danger" id="deleteSw">Delete switch</button>` : ""}
+          </div>
+        </div>
+      </div>`;
+    frag.append(renderSavedLists(home));
+    const neu = frag.querySelector('[data-field="neutrals"]');
+    if (neu) neu.innerHTML = NEUTRALS.map((n) => `<button type="button" class="chip" data-value="${n.value}" aria-pressed="${home.neutrals===n.value?"true":"false"}">${esc(n.label)}</button>`).join("");
+    return frag;
+  }
+  function renderSavedLists(home) {
+    const floor = state.draft.floor, room = effectiveRoom(state.draft);
+    const seen = new Set(); const groups = [];
+    home.switches.forEach((sw) => {
+      if (!sw.groupId || seen.has(sw.groupId)) return;
+      const members = home.switches.filter((s) => s.groupId === sw.groupId);
+      if (!members.some((m) => m.floor === floor)) return;
+      seen.add(sw.groupId); groups.push(members);
+    });
+    const singles = home.switches.filter((sw) => !sw.groupId && roomNameOf(sw, home) === room && sw.floor === floor);
+    const smart = singles.filter(isSmart), dumb = singles.filter((s) => !isSmart(s));
+    let html = "";
+    if (groups.length) {
+      html += `<div class="card"><h2>Multi-way on ${esc(floor)}</h2>`;
+      groups.forEach((members) => {
+        const first = members[0];
+        const load = first.load === "Other" ? (first.loadOther || "Other") : first.load;
+        html += `<div class="card mw"><strong>${esc(load)}</strong><p class="hint">${esc(wayLabel(members.length))}, ${members.length} locations. Role is a starting guess; the electrician confirms which box is the line/main at install.</p>`;
+        members.forEach((m, i) => {
+          html += `<div class="row" style="margin-bottom:8px"><button type="button" class="list-item" data-edit="${m.id}"><strong>${i+1} of ${members.length} · ${esc(locLabel(m) || roomNameOf(m, home))}</strong><span>${esc(roleOf(m, home))} · ${esc(roomNameOf(m, home))}${locLabel(m) ? " · " + esc(locLabel(m)) : ""}</span></button><button type="button" class="btn" data-unlink="${m.id}">Unlink</button></div>`;
+        });
+        html += `</div>`;
+      });
+      html += `</div>`;
+    }
+    if (smart.length) {
+      html += `<div class="card"><h2>Smart switches in ${esc(floor)} ${esc(room)}</h2><div class="stack">`;
+      smart.forEach((s) => { html += `<button type="button" class="list-item" data-edit="${s.id}"><strong>${esc(displayName(s, room))}</strong><span>${s.gangPosition} of ${s.gangSize} · ${esc(kindLabel(shopKind(s)))}</span></button>`; });
+      html += `</div></div>`;
+    }
+    if (dumb.length) {
+      html += `<div class="card"><h2>Dumb switches in ${esc(floor)} ${esc(room)}</h2><div class="stack">`;
+      dumb.forEach((s) => { html += `<button type="button" class="list-item dumb" data-edit="${s.id}"><strong>${esc(displayName(s, room))}</strong><span>Dumb · tap to upgrade</span></button>`; });
+      html += `</div></div>`;
+    }
+    const box = document.createElement("div"); box.innerHTML = html; return box;
+  }
+  function renderSummary(home) {
+    const { s, rows } = orderRows(home);
+    const brandVal = home.brand === "caseta" ? "Lutron Caseta" : home.brand === "inovelli" ? "Inovelli" : "Undecided";
+    const frag = document.createElement("div");
+    frag.innerHTML = `
+      <div class="card"><label class="field">Home name</label><input type="text" id="homeName" placeholder="Name this house" value="${esc(home.name)}" autocomplete="off">
+        <div class="field-wrap" style="margin-top:12px"><label class="field">Brand</label>${chipRow("brand", BRANDS, brandVal)}</div>
+        <p class="hint">Walk stays brand-neutral. Pick a brand when you are ready to order.</p></div>
+      <div class="card"><h2>Order list</h2>
+        <table><thead><tr><th>Item</th><th>Qty</th><th>Part</th></tr></thead>
+        <tbody>${rows.length ? rows.map((r)=>`<tr><td>${esc(r.item)}</td><td>${r.qty}</td><td>${esc(r.part)}</td></tr>`).join("") : "<tr><td colspan=3>None yet</td></tr>"}</tbody></table>
+        <p class="hint">${s.dumb} dumb switch${s.dumb===1?"":"es"} (not ordered). ${s.locations} location${s.locations===1?"":"s"} logged.</p></div>
+      ${s.groups.length ? `<div class="card"><h2>Multi-way groups</h2>${s.groups.map((g)=>`<p><strong>${esc(g.name)}</strong> · ${esc(g.way)}<br><span class="sub">${esc(g.locs)}</span></p>`).join("")}<p class="hint">Role is a starting guess. The electrician confirms which box is the line/main at install.</p></div>` : ""}
+      ${s.issues.length ? `<div class="card"><h2>Open issues</h2>${s.issues.map((i)=>`<p>${esc(i)}</p>`).join("")}</div>` : ""}
+      <div class="card"><h2>Export this home</h2><div class="stack">
+        <button type="button" class="btn primary" id="exportJson">Export JSON backup</button>
+        <button type="button" class="btn" id="exportCsv">Export CSV order sheet</button>
+        <button type="button" class="btn" id="shareBtn">Copy / Share</button>
+      </div></div>`;
+    return frag;
+  }
+  function renderHomes(home) {
+    const frag = document.createElement("div");
+    frag.innerHTML = `
+      <div class="card"><h2>Homes</h2>
+        <p class="hint">Each home is a separate survey, saved only on this phone. Exports are per home unless you export all JSON.</p>
+        <div class="stack">${state.store.homes.map((h) => `<button type="button" class="list-item" data-select-home="${h.id}"><strong>${esc(h.name || "Untitled home")}${h.isExample?" (example)":""}</strong><span>${h.switches.length} location${h.switches.length===1?"":"s"}</span></button>`).join("")}</div>
+      </div>
+      <div class="card"><label class="field">New home name</label><input type="text" id="newHomeName" placeholder="Another house" autocomplete="off">
+        <div class="stack" style="margin-top:10px">
+          <button type="button" class="btn primary" id="addHome">Add home</button>
+          <button type="button" class="btn" id="loadExample">Load example house</button>
+          ${home.isExample ? `<button type="button" class="btn" id="clearExample">Remove example</button>` : ""}
+          ${state.store.homes.length > 1 ? `<button type="button" class="btn danger" id="deleteHome">Delete this home</button>` : ""}
+        </div>
+      </div>
+      <div class="card"><h2>Backup</h2><div class="stack">
+        <button type="button" class="btn" id="exportAll">Export all homes JSON</button>
+        <button type="button" class="btn" id="exportJson">Export this home JSON</button>
+        <button type="button" class="btn" id="exportCsv">Export this home CSV</button>
+        <button type="button" class="btn" id="shareBtn">Copy / Share this home</button>
+        <label class="field">Import JSON</label><input type="file" id="importFile" accept="application/json,.json">
+      </div></div>
+      <div class="card"><h2>PIN</h2>
+        <p class="hint">Change your PIN while unlocked. Forgot PIN is on the lock screen and erases data on this phone unless you already have a backup.</p>
+        <button type="button" class="btn" id="changePin">Change PIN</button>
+      </div>`;
+    return frag;
+  }
+
+  function bindLock() {
+    document.getElementById("keypad")?.addEventListener("click", onKey);
+    document.getElementById("forgot")?.addEventListener("click", () => { state.forgot = 1; render(); });
+    document.getElementById("forgotCancel")?.addEventListener("click", () => { state.forgot = 0; render(); });
+    document.getElementById("forgotWarn")?.addEventListener("click", () => { state.forgot = 2; render(); });
+    document.getElementById("forgotConfirm")?.addEventListener("click", () => { resetAllData(); render(); });
+    document.getElementById("cancelSetup")?.addEventListener("click", () => {
+      if (!state.store || !state.key) return;
+      state.setup = false; state.locked = false; state.pinBuf = ""; state.pinAgain = ""; state.setupStep = 1; state.unlockError = "";
+      render();
+    });
+  }
+  function onKey(ev) {
+    const btn = ev.target.closest("[data-key]"); if (!btn) return;
+    const k = btn.getAttribute("data-key");
+    const setup = state.setup || !hasPin();
+    const field = setup && state.setupStep === 2 ? "pinAgain" : "pinBuf";
+    if (k === "Del") { state[field] = state[field].slice(0, -1); state.unlockError = ""; render(); return; }
+    if (k === "OK") { submitPin(); return; }
+    if (state[field].length >= 6) return;
+    state[field] += k; state.unlockError = "";
+    render();
+    if (!setup && state[field].length >= 4) {
+      clearTimeout(window.__ssPinTimer);
+      const wait = state[field].length >= 6 ? 40 : 700;
+      window.__ssPinTimer = setTimeout(submitPin, wait);
+    }
+  }
+  async function submitPin() {
+    const setup = state.setup || !hasPin();
+    if (setup) {
+      if (state.setupStep === 1) {
+        if (state.pinBuf.length < 4 || state.pinBuf.length > 6) { state.unlockError = "Use 4 to 6 digits."; render(); return; }
+        state.setupStep = 2; state.unlockError = ""; render(); return;
+      }
+      if (state.pinAgain !== state.pinBuf) { state.unlockError = "PINs did not match. Start over."; state.setupStep = 1; state.pinBuf = ""; state.pinAgain = ""; render(); return; }
+      await setNewPin(state.pinBuf); flash("PIN set. This survey is saved only on this phone."); render(); return;
+    }
+    if (state.pinBuf.length < 4) return;
+    const ok = await tryUnlock(state.pinBuf);
+    if (!ok) { state.unlockError = "That PIN did not work."; state.pinBuf = ""; render(); return; }
+    render();
+  }
+  function flash(msg) { state.flash = msg; setTimeout(() => { if (state.flash === msg) { state.flash = ""; render(); } }, 4000); }
+  function bindMain() {
+    document.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => { state.tab = b.getAttribute("data-tab"); persist(); render(); }));
+    const name = document.getElementById("homeName");
+    if (name) name.addEventListener("input", () => { const h = homeOf(); h.name = name.value; setHome(h); });
+    document.querySelectorAll(".chip").forEach((btn) => {
+      const field = btn.parentElement.getAttribute("data-field");
+      btn.addEventListener("click", () => onChip(field, btn.getAttribute("data-value")));
+    });
+    document.querySelectorAll("select[data-field], input[data-field], textarea[data-field]").forEach((el) => {
+      el.addEventListener("input", () => { state.draft[el.getAttribute("data-field")] = el.value; persist(); render(); });
+    });
+    document.getElementById("moreToggle")?.addEventListener("click", () => { state.moreOpen = !state.moreOpen; render(); });
+    document.getElementById("saveSw")?.addEventListener("click", () => saveSwitch(false));
+    document.getElementById("logDumb")?.addEventListener("click", () => saveSwitch(true));
+    document.getElementById("clearDraft")?.addEventListener("click", () => { const d = state.draft; state.draft = emptyDraft(d.floor, d.room); state.draft.roomOther = d.roomOther; state.pendingMatch = null; persist(); render(); });
+    document.getElementById("deleteSw")?.addEventListener("click", deleteSwitch);
+    document.getElementById("linkYes")?.addEventListener("click", linkPending);
+    document.getElementById("linkNo")?.addEventListener("click", rejectPending);
+    document.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => editSwitch(b.getAttribute("data-edit"))));
+    document.querySelectorAll("[data-unlink]").forEach((b) => b.addEventListener("click", () => unlinkSwitch(b.getAttribute("data-unlink"))));
+    document.getElementById("exportJson")?.addEventListener("click", () => download(fileName(homeOf(), "json"), exportJson({ version:1, kind:"ha-switch-survey", homes:[homeOf()], activeHomeId: homeOf().id }), "application/json"));
+    document.getElementById("exportCsv")?.addEventListener("click", () => download(fileName(homeOf(), "csv"), orderCsv(homeOf()), "text/csv"));
+    document.getElementById("exportAll")?.addEventListener("click", () => download("switch-survey-all.json", exportJson(state.store), "application/json"));
+    document.getElementById("shareBtn")?.addEventListener("click", shareHome);
+    document.getElementById("addHome")?.addEventListener("click", addHome);
+    document.getElementById("loadExample")?.addEventListener("click", loadExample);
+    document.getElementById("clearExample")?.addEventListener("click", clearExample);
+    document.getElementById("deleteHome")?.addEventListener("click", deleteHome);
+    document.querySelectorAll("[data-select-home]").forEach((b) => b.addEventListener("click", () => { state.store.activeHomeId = b.getAttribute("data-select-home"); state.draft = emptyDraft("Main",""); state.pendingMatch = null; persist(); render(); }));
+    document.getElementById("importFile")?.addEventListener("change", importFile);
+    document.getElementById("changePin")?.addEventListener("click", () => { state.locked = true; state.setup = true; state.setupStep = 1; state.pinBuf = ""; state.pinAgain = ""; state.unlockError = ""; render(); });
+  }
+  function onChip(field, value) {
+    if (field === "neutrals") { const h = homeOf(); h.neutrals = value; setHome(h); render(); return; }
+    if (field === "brand") {
+      const h = homeOf();
+      h.brand = value === "Lutron Caseta" ? "caseta" : value === "Inovelli" ? "inovelli" : "undecided";
+      setHome(h); render(); return;
+    }
+    if (field === "qualifier" && state.draft.qualifier === value) state.draft.qualifier = "";
+    else if (field === "location" && state.draft.location === value) state.draft.location = "";
+    else if (field === "kindOverride") state.draft.kindOverride = value;
+    else if (field === "gangSize") { state.draft.gangSize = Number(value); if (state.draft.gangPosition > state.draft.gangSize) state.draft.gangPosition = 1; }
+    else if (field === "gangPosition") state.draft.gangPosition = Number(value);
+    else state.draft[field] = value;
+    persist(); render();
+  }
+  function upsertRoom(home, floor, name) {
+    let r = home.rooms.find((x) => x.floor === floor && x.name === name);
+    if (!r) { r = { id: uid("room"), name, floor }; home.rooms.push(r); }
+    return r;
+  }
+  function recordFromDraft(home, asDumb) {
+    const d = state.draft;
+    const room = upsertRoom(home, d.floor, effectiveRoom(d));
+    return {
+      id: d.editId || uid("sw"), roomId: room.id, floor: d.floor,
+      load: d.load, loadOther: d.load === "Other" ? (d.loadOther || "").trim() : "",
+      qualifier: d.qualifier, location: effectiveLocation(d), locationOther: d.location === "Other" ? (d.locationOther || "").trim() : "",
+      gangSize: Number(d.gangSize) || 1, gangPosition: Number(d.gangPosition) || 1,
+      loggedDumb: asDumb, note: d.note || "", kindOverride: d.kindOverride || "",
+      groupId: d.groupId || "", switchType: "single", groupPosition: 1
+    };
+  }
+  function saveSwitch(asDumb) {
+    const d = state.draft, home = homeOf();
+    if (!d.room) { flash("Choose a room."); return; }
+    if (!d.load) { flash("Choose a load."); return; }
+    if (d.room === "Other" && !d.roomOther.trim()) { flash("Name the other room."); return; }
+    if (d.load === "Other" && !d.loadOther.trim()) { flash("Name the other load."); return; }
+    if ((state.pendingMatch || d.groupId) && !effectiveLocation(d)) { flash("Pick where this paddle is."); return; }
+    const rec = recordFromDraft(home, asDumb);
+    if (d.editId) {
+      home.switches = home.switches.map((s) => s.id === rec.id ? { ...s, ...rec, groupId: s.groupId, switchType: s.switchType, groupPosition: s.groupPosition } : s);
+      if (asDumb && rec.groupId) home.switches = unlinkMember(home.switches, rec.id);
+      if (!asDumb && rec.groupId) home.switches = applyGroup(home.switches, rec.groupId);
+      setHome(home);
+      if (asDumb) { flash("Saved as dumb."); resetDraftKeepRoom(); return; }
+      state.pendingMatch = null; persist(); flash("Saved."); render(); return;
+    }
+    if (asDumb) { home.switches.push(rec); setHome(home); flash("Logged as dumb."); resetDraftKeepRoom(); return; }
+    const matches = findMatches(home, rec);
+    if (matches.length && !rec.groupId) { state.pendingMatch = { rec, matches }; persist(); render(); return; }
+    home.switches.push(rec); setHome(home); flash("Saved."); resetDraftKeepRoom();
+  }
+  function linkPending() {
+    const pending = state.pendingMatch; if (!pending) return;
+    const d = state.draft;
+    if (!effectiveLocation(d)) { flash("Pick where this paddle is."); return; }
+    const home = homeOf();
+    const rec = recordFromDraft(home, false);
+    rec.location = effectiveLocation(d);
+    const existing = pending.matches[0];
+    const groupId = existing.groupId || uid("grp");
+    const ids = [existing.id, rec.id].concat(pending.matches.slice(1).map((m) => m.id));
+    if (!existing.location && existing.id === pending.matches[0].id) {
+      home.switches = home.switches.map((s) => s.id === existing.id ? { ...s, location: existing.location || roomNameOf(existing, home) } : s);
+    }
+    home.switches.push(rec);
+    home.switches = joinGroup(home.switches, ids, groupId);
+    setHome(home); state.pendingMatch = null; flash("Linked as a multi-way."); resetDraftKeepRoom();
+  }
+  function rejectPending() {
+    const pending = state.pendingMatch;
+    if (pending && pending.rec) {
+      const home = homeOf();
+      home.switches.push(pending.rec);
+      setHome(home);
+    }
+    state.pendingMatch = null;
+    flash("Saved as a different load.");
+    resetDraftKeepRoom();
+  }
+  function resetDraftKeepRoom() {
+    const d = state.draft;
+    state.draft = emptyDraft(d.floor, d.room);
+    state.draft.roomOther = d.roomOther;
+    state.pendingMatch = null;
+    persist(); render();
+  }
+  function editSwitch(id) {
+    const home = homeOf();
+    const sw = home.switches.find((s) => s.id === id); if (!sw) return;
+    const room = roomNameOf(sw, home);
+    state.tab = "walk";
+    state.draft = {
+      editId: sw.id, floor: sw.floor, room: ROOMS.includes(room) ? room : "Other",
+      roomOther: ROOMS.includes(room) ? "" : room, load: sw.load, loadOther: sw.loadOther || "",
+      qualifier: sw.qualifier || "", location: LOCATIONS.includes(sw.location) ? sw.location : (sw.location ? "Other" : ""),
+      locationOther: LOCATIONS.includes(sw.location) ? "" : (locLabel(sw)),
+      gangSize: sw.gangSize, gangPosition: sw.gangPosition, loggedDumb: sw.loggedDumb,
+      note: sw.note || "", kindOverride: sw.kindOverride || "", groupId: sw.groupId || ""
+    };
+    state.moreOpen = Boolean(sw.note || sw.kindOverride);
+    persist(); render();
+    window.scrollTo(0, 0);
+  }
+  function deleteSwitch() {
+    const id = state.draft.editId; if (!id) return;
+    if (!confirm("Delete this switch?")) return;
+    const home = homeOf();
+    home.switches = unlinkMember(home.switches, id).filter((s) => s.id !== id);
+    setHome(home); resetDraftKeepRoom(); flash("Deleted.");
+  }
+  function unlinkSwitch(id) {
+    const home = homeOf();
+    home.switches = unlinkMember(home.switches, id);
+    setHome(home); flash("Unlinked."); render();
+  }
+  function addHome() {
+    const name = (document.getElementById("newHomeName")?.value || "").trim();
+    const h = blankHome(); h.name = name; state.store.homes.push(h);
+    state.store.activeHomeId = h.id; state.draft = emptyDraft("Main",""); state.pendingMatch = null;
+    persist(); flash("Home added."); render();
+  }
+  function loadExample() {
+    const existing = state.store.homes.find((h) => h.isExample);
+    if (existing) { state.store.activeHomeId = existing.id; }
+    else { const h = buildExampleHome(); state.store.homes.push(h); state.store.activeHomeId = h.id; }
+    state.draft = emptyDraft("Main",""); state.pendingMatch = null; persist(); flash("Example house loaded."); render();
+  }
+  function clearExample() {
+    const home = homeOf(); if (!home.isExample) return;
+    if (state.store.homes.length === 1) { const h = blankHome(); state.store.homes = [h]; state.store.activeHomeId = h.id; }
+    else { state.store.homes = state.store.homes.filter((h) => h.id !== home.id); state.store.activeHomeId = state.store.homes[0].id; }
+    state.draft = emptyDraft("Main",""); persist(); flash("Example removed."); render();
+  }
+  function deleteHome() {
+    if (state.store.homes.length < 2) return;
+    if (!confirm("Delete this home and its switches from this phone?")) return;
+    const id = state.store.activeHomeId;
+    state.store.homes = state.store.homes.filter((h) => h.id !== id);
+    state.store.activeHomeId = state.store.homes[0].id;
+    state.draft = emptyDraft("Main",""); persist(); flash("Home deleted."); render();
+  }
+  function fileName(home, ext) {
+    const slug = (home.name || "switch-survey").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "switch-survey";
+    return slug + "." + ext;
+  }
+  function download(name, text, type) {
+    const blob = new Blob([text], { type });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    flash("Downloaded " + name);
+  }
+  async function shareHome() {
+    const home = homeOf();
+    const json = exportJson({ version:1, kind:"ha-switch-survey", homes:[home], activeHomeId: home.id });
+    const file = new File([json], fileName(home, "json"), { type: "application/json" });
+    try {
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ title: "Switch Survey", files: [file] }); flash("Shared."); return; }
+      if (navigator.share) { await navigator.share({ title: "Switch Survey", text: json }); flash("Shared."); return; }
+    } catch (e) { if (e && e.name === "AbortError") return; }
+    try { await navigator.clipboard.writeText(json); flash("Copied JSON backup."); } catch { download(fileName(home, "json"), json, "application/json"); }
+  }
+  function importFile(ev) {
+    const file = ev.target.files && ev.target.files[0]; ev.target.value = ""; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(String(reader.result));
+        if (!data || data.kind !== "ha-switch-survey" || !Array.isArray(data.homes)) throw new Error("bad");
+        data.homes.forEach((h) => {
+          if (!h.id) h.id = uid("home");
+          const clash = state.store.homes.find((x) => x.id === h.id);
+          if (clash) h.id = uid("home");
+          state.store.homes.push(h);
+        });
+        if (data.homes[0]) state.store.activeHomeId = data.homes[0].id;
+        persist(); flash("Imported " + data.homes.length + " home" + (data.homes.length===1?"":"s") + "."); render();
+      } catch { flash("That file is not a Switch Survey JSON backup."); render(); }
+    };
+    reader.readAsText(file);
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) lastHidden = Date.now();
+    else if (state.key && lastHidden && Date.now() - lastHidden >= IDLE_MS) lockNow();
+  });
+  window.addEventListener("pagehide", () => { lastHidden = Date.now(); });
+  window.addEventListener("pageshow", (ev) => {
+    if (ev.persisted && state.key && lastHidden && Date.now() - lastHidden >= IDLE_MS) lockNow();
+  });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyChrome);
+  applyChrome();
+  state.setup = !hasPin();
+  if (["127.0.0.1","localhost"].includes(location.hostname)) {
+    window.__ss = {
+      forceIdleLock() { lastHidden = Date.now() - IDLE_MS; lockNow(); },
+      isLocked() { return state.locked; },
+      counts() { const h = homeOf(); return h ? summaryOf(h) : null; }
+    };
+  }
+  render();
+})();
+</script>
+</body>
+</html>
