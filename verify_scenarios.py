@@ -87,10 +87,6 @@ async def pick_existing_light(page, contains):
     raise AssertionError(f"no visible light chip containing {contains!r}; chips={labels}")
 
 
-async def set_qualifier(page, tag):
-    await page.click(f'[data-field="qualifier"] .chip[data-value="{tag}"]')
-    await page.wait_for_timeout(60)
-
 async def set_fan(page, label):
     await page.click(f'[data-field="fanType"] .chip[data-value="{label}"]')
     await page.wait_for_timeout(60)
@@ -249,8 +245,8 @@ async def run():
         await open_hint(page, "addSwitch")
         body = await page.inner_text("body")
         check("intro is Survey every switch in order", "Survey every switch in order" in body)
-        check("intro mentions tap name under Load", "tap its name under Load" in body)
-        check("Which one? has Island/Sink/#2 tags", "Island" in body and "Sink" in body and "#2" in body)
+        check("intro mentions tap a logged light name", "tap its name in the list of lights already logged" in body)
+        check("Which one? is not on the form", "Which one?" not in body and await page.locator('[data-field="qualifier"]').count() == 0)
         check("Switch type has Not sure if dimmable", "Not sure if dimmable" in body)
         check("fixture count is not on the main form", await page.locator("#fixtureOpen").count() == 0 and "Fixtures on this switch" not in body)
 
@@ -362,25 +358,21 @@ async def run():
         })
         check("S4 4-way badge", "4-way (3 locations)" in (await page.inner_text("body")))
 
-        # 5. Kitchen 3 can groups: island (3-way), sink (3-way), #3 (single)
+        # 5. Kitchen 3 can groups: first cans (3-way), sink (3-way), #2 (single).
+        # Tags come only from the Same light / New light prompt, not a form field.
         await goto_walk_new_home(page, "S5 Kitchen three can groups")
         await pick_room_load(page, "Kitchen", "Can lights")
-        await set_qualifier(page, "Island")
         await save(page)
-        check("S5 island first, no prompt", not await has_same_or_new(page))
+        check("S5 first cans, no prompt", not await has_same_or_new(page))
         await pick_room_load(page, "Kitchen", "Can lights")
-        await set_qualifier(page, "Island")
         await save(page)
-        check("S5 second island asks Same/New (no silent merge)", await has_same_or_new(page))
-        await click_same_light(page, "island")
+        check("S5 second cans asks Same/New (no silent merge)", await has_same_or_new(page))
+        await click_same_light(page, "cans")
         await pick_room_load(page, "Kitchen", "Can lights")
-        await set_qualifier(page, "Sink")
         await save(page)
-        # unique tag should save immediately as new, or prompt; either is ok if not merged into island
-        if await has_same_or_new(page):
-            await click_new_light(page, "Sink")
+        check("S5 first sink asks Same/New", await has_same_or_new(page))
+        await click_new_light(page, "Sink")
         await pick_room_load(page, "Kitchen", "Can lights")
-        await set_qualifier(page, "Sink")
         await save(page)
         check("S5 second sink asks Same/New", await has_same_or_new(page))
         await click_same_light(page, "sink")
@@ -388,11 +380,11 @@ async def run():
         await save(page)
         check("S5 third group asks Same/New", await has_same_or_new(page))
         body = await page.inner_text("body")
-        check("S5 prompt names show tags", "island" in body.lower() and "sink" in body.lower())
-        await click_new_light(page, "#3")
+        check("S5 prompt names show tags", "sink" in body.lower())
+        await click_new_light(page, "#2")
         body = await page.inner_text("body")
-        check("S5 walk list shows island, sink, #3", "island" in body.lower() and "sink" in body.lower() and "#3" in body)
-        await assert_order(page, "S5 kitchen island/sink/#3 cans with 3-ways", {
+        check("S5 walk list shows cans, sink, #2", "sink" in body.lower() and "#2" in body)
+        await assert_order(page, "S5 kitchen cans/sink/#2 with 3-ways", {
             "dimmer": 3, "onoff": 0, "fan": 0, "companion": 2, "dumb": 0,
             "plates": {1: 5}, "locations": 5, "verify": 0
         })
@@ -400,7 +392,7 @@ async def run():
         await page.click("[data-tab='walk']")
         await pick_room_load(page, "Kitchen", "Can lights")
         body = await page.inner_text("body")
-        check("S5 walk form shows tagged light chips", "island cans" in body.lower() and "sink cans" in body.lower() and "#3 cans" in body.lower())
+        check("S5 walk form shows tagged light chips", "sink cans" in body.lower() and "#2 cans" in body.lower())
         check("filter box on walk form", await page.locator('input[data-field="lightFilter"]').count() > 0)
         await shot(page, "393-dark-walk-form.png")
 
@@ -524,7 +516,6 @@ async def run():
         await set_fixture(page, 3)
         await save(page)
         await pick_room_load(page, "Office", "Sconces")
-        await set_qualifier(page, "Left")
         await save(page)
         await page.reload(wait_until="load")
         await page.wait_for_selector("#keypad")
@@ -666,7 +657,7 @@ async def run():
         bg = await page.eval_on_selector("body", "el => getComputedStyle(el).backgroundColor")
         check("light bg", bg.replace(" ", "") == "rgb(243,241,234)", bg)
         body = await page.inner_text("body")
-        check("light walk form shows tagged light chips", "island cans" in body.lower() and "sink cans" in body.lower())
+        check("light walk form shows tagged light chips", "sink cans" in body.lower() and "#2 cans" in body.lower())
         await shot(page, "393-light-walk-form.png")
         await page.click("[data-tab='summary']")
         await page.wait_for_timeout(80)

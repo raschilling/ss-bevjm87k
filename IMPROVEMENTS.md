@@ -117,3 +117,14 @@ Hint and description paragraphs are no longer always on screen. A small **i** ic
 
 **How many?** is gone from the main form. For multi-fixture loads, a small **+ fixture count** control opens an optional **Fixtures on this switch** row (for example 6 cans). The stored key is still `fixtureCount`. It does not change what is ordered. The order sheet uses it only for the wattage-limit warning at high counts (6 or more) and, when the brand is Inovelli and the house has no neutrals, a flicker/bypass note for 1–2 small LEDs. S8 uses this collapsed control.
 
+## 2026-11-24 — Remove “Which one?” from the form
+
+**Which one? (only if this room has two)** is gone from the survey form. Same-type lights in the same room are handled only by the **Same light as X / New light** prompt and its tag chips (Island, Sink, Front, Back, Left, Right, #2 / #3 / #4). The stored key is still `qualifier`, so older surveys keep their tags in names, chips, and export. The CSV column is now **Tag**. S5 tags lights from that prompt (first cans, then Sink, then #2). Removing the field also lets a full entry, including Clear for next, fit on a 393×852 phone with no overflow (Save stays on screen).
+
+Other form wording that was easy to trip over was simplified in the same pass:
+
+- **Load** is now **What it controls** (the Other name field is **Name for what it controls**). Validation says “Choose what it controls.”
+- Under More, **Where is this switch?** was easy to confuse with **Where the switch is** (floor and room). It is now **Doorway or wall, optional**, with **Custom spot** when you pick Other.
+- The note placeholder no longer says “Traveler colors.” It is “Anything to remember at this box.”
+- Light chips on the form are labeled **Lights already logged**.
+
