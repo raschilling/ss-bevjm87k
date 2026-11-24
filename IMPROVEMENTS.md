@@ -72,3 +72,15 @@ Multi-way detection is automatic so you can walk every switch in order and not h
 ## 2026-11-24 — “Is the light in this room?”
 
 The old **Light is somewhere else** toggle was confusing. It is now a plain yes/no question: **Is the light in this room?** Default is **Yes**, already selected, so no tap is needed when the light is with the switch. **No** reveals **Where is the light?** with floor and room. The stored keys are still `lightFloor` / `lightRoom`, so existing data and imports keep working. 3-way linking still keys on the light, including lights in another room.
+
+## 2026-11-24 — Light location under More; Same light vs New light
+
+**Light is in a different room** is now an optional choice under **More**, defaulting to the same room as the switch. It is not on the main walk screen, and there is no yes/no question there. Floor and room for the light still store as `lightFloor` / `lightRoom`.
+
+When a new switch’s load and light location match a light already logged in that room, the app no longer auto-merges silently. It asks, in one tap, **Same light as &lt;name&gt;** or **New light**. Same light makes a 3-way or 4-way with that named light. New light asks for a short optional tag — Island, Sink, Front, Back, Left, Right, or auto **#2** / **#3** / **#4** — so the names stay distinct and the lights never merge. **Which one?** chips include those tags, and list names show them (for example Kitchen island cans). A switch you mark under More as controlling a light in another room still auto-groups with that light.
+
+A “Not sure” fan now counts toward wallplates, because it still occupies a box. Pure regular (not smart) switches still do not appear on the order list.
+
+## 2026-11-24 — End-to-end scenario suite
+
+`verify_scenarios.py` walks 12 realistic houses in WebKit at 393px and asserts a hand-computed order sheet for each (dimmers, on/off, fan, companions, regular switches, wallplates, verify-on-site, and shopping-list / CSV / JSON agreement).

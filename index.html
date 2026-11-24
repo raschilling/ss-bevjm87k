@@ -128,7 +128,7 @@
   const LOADS = ["Can lights","Ceiling fan","Chandelier","Closet light","Exhaust fan","Exterior lights","Fan + light","Flood lights","Lamp outlet","Pendants","Sconces","Under-cabinet","Vanity light","Wafer lights","Other"];
   const MULTI_FIXTURE_LOADS = ["Can lights","Chandelier","Exterior lights","Flood lights","Pendants","Sconces","Under-cabinet","Wafer lights"];
   const SHORT_LOAD = {"Can lights":"cans","Wafer lights":"wafers","Sconces":"sconces","Pendants":"pendants","Under-cabinet":"under-cabinet","Chandelier":"chandelier","Flood lights":"floods","Exterior lights":"exterior lights"};
-  const QUALIFIERS = ["Left","Right","Front","Back","Upper","Lower","1","2","3","4"];
+  const QUALIFIERS = ["Island","Sink","Left","Right","Front","Back","Upper","Lower","#2","#3","#4"];
   const LOCATIONS = ["Entry","Hall","Top of stairs","Bottom of stairs","Garage door","Back door","Bedside","Other"];
   const BRANDS = ["Undecided","Inovelli","Lutron Caseta"];
   const FAN_TYPES = ["AC","DC","Not sure"];
@@ -224,11 +224,12 @@
     const n = fixtureCountOf(sw);
     const room = roomNameOf(sw, home);
     const count = n ? " x" + n : "";
+    const tag = sw.qualifier || "";
+    const load = shortLoadName(sw);
     if (lightIsElsewhere(sw, home)) {
-      return locPair(sw.floor, room) + " switch → " + locPair(lightFloorOf(sw), lightRoomOf(sw, home)) + " " + shortLoadName(sw) + count;
+      return locPair(sw.floor, room) + " switch → " + locPair(lightFloorOf(sw), lightRoomOf(sw, home)) + " " + [tag, load].filter(Boolean).join(" ") + count;
     }
-    if (n) return (room || sw.floor || "") + " " + shortLoadName(sw) + count;
-    return displayName(sw, room);
+    return [room || sw.floor || "", tag, load].filter(Boolean).join(" ") + count;
   }
   function displayName(sw, roomName) {
     const load = sw.load === "Other" ? (sw.loadOther || "Other") : sw.load;
@@ -273,6 +274,34 @@
   function findMatches(home, rec) {
     const key = groupKeyOf(rec, home);
     return home.switches.filter((s) => s.id !== rec.id && isSmart(s) && groupKeyOf(s, home) === key && !isSplitPair(s, rec));
+  }
+  function sameLoad(a, b) {
+    if (a.load !== b.load) return false;
+    if (a.load === "Other") return (a.loadOther || "").trim() === (b.loadOther || "").trim();
+    return true;
+  }
+  function findSameLoadAndPlace(home, rec) {
+    return home.switches.filter((s) => s.id !== rec.id && isSmart(s) && sameLoad(s, rec) && lightFloorOf(s) === lightFloorOf(rec) && lightRoomOf(s, home) === lightRoomOf(rec, home));
+  }
+  function uniqueLightCandidates(home, switches) {
+    const seen = {}, out = [];
+    switches.forEach((s) => {
+      const idKey = s.groupId ? "g:" + s.groupId : "u:" + (s.qualifier || "");
+      if (seen[idKey]) return;
+      seen[idKey] = true;
+      out.push(s);
+    });
+    return out;
+  }
+  function usedLightTags(home, rec) {
+    return findSameLoadAndPlace(home, rec).map((s) => s.qualifier || "");
+  }
+  function nextAutoTag(home, rec) {
+    const used = {};
+    usedLightTags(home, rec).forEach((q) => { used[q] = true; if (/^#?(\d+)$/.test(q)) used["#"+q.replace("#","")] = true; });
+    let n = 2;
+    while (used["#"+n] || used[String(n)]) n++;
+    return "#"+n;
   }
   function applyGroup(switches, groupId) {
     const members = switches.filter((s) => s.groupId === groupId);
@@ -407,7 +436,8 @@
     });
     const plates = { 1: 0, 2: 0, 3: 0, 4: 0 };
     const buckets = {};
-    shopped.forEach((s) => {
+    const forPlates = home.switches.filter((s) => isSmart(s) || s.groupId);
+    forPlates.forEach((s) => {
       const g = Number(s.gangSize) || 1;
       const key = s.floor + "|" + roomNameOf(s, home) + "|" + g;
       buckets[key] = (buckets[key] || 0) + 1;
@@ -653,6 +683,7 @@
   function resolvePendingMatch() {
     const pending = state.pendingMatch;
     if (!pending || !pending.rec || !state.store) { state.pendingMatch = null; return; }
+    if (pending.step === "choose" || pending.step === "tag" || pending.candidates) return;
     const home = homeOf();
     const rec = pending.rec;
     if (!home.switches.some((s) => s.id === rec.id)) home.switches.push(rec);
@@ -758,6 +789,49 @@
     wrap.querySelector("#main").append(state.tab === "summary" ? renderSummary(home) : state.tab === "homes" ? renderHomes(home) : renderWalk(home));
     return wrap;
   }
+  function pendingChoiceHtml(home) {
+    const p = state.pendingMatch;
+    if (!p || !p.rec) return "";
+    if (p.step === "tag") {
+      const suggest = p.suggested || nextAutoTag(home, p.rec);
+      const cur = p.tag || "";
+      const chips = ["Island","Sink","Front","Back","Left","Right","#2","#3","#4"];
+      const chipHtml = `<div class="chips" data-field="pendingTag">` + chips.map((v) => `<button type="button" class="chip" data-value="${esc(v)}" aria-pressed="${cur===v?"true":"false"}">${esc(v)}</button>`).join("") + `</div>`;
+      return `<div class="card mw" id="sameOrNew"><p>New light. Add a short name so it stays separate. If you skip this, it will be called ${esc(suggest)}.</p>${chipHtml}<div class="row" style="margin-top:10px"><button type="button" class="btn primary" id="newLightOk">Save as new light</button><button type="button" class="btn" id="pendingBack">Back</button></div></div>`;
+    }
+    const cands = p.candidates || [];
+    const load = shortLoadName(p.rec) || p.rec.load || "this load";
+    const btns = cands.map((c) => `<button type="button" class="btn primary" data-same-light="${c.id}">Same light as ${esc(listLabel(c, home))}</button>`).join("");
+    return `<div class="card mw" id="sameOrNew"><p>This room already has ${esc(load)}. Is this the same light, or a new one?</p><div class="stack">${btns}<button type="button" class="btn" id="newLight">New light</button></div></div>`;
+  }
+  function finishNewLight(tag) {
+    const p = state.pendingMatch; if (!p || !p.rec) return;
+    const home = homeOf();
+    const rec = p.rec;
+    rec.qualifier = tag || p.suggested || nextAutoTag(home, rec);
+    if (p.editing) {
+      home.switches = home.switches.map((s) => s.id === rec.id ? { ...s, qualifier: rec.qualifier } : s);
+    } else {
+      home.switches.push(rec);
+    }
+    setHome(home); state.pendingMatch = null; flash("Saved as a new light (" + rec.qualifier + ")."); resetDraftKeepRoom();
+  }
+  function acceptSameLight(id) {
+    const p = state.pendingMatch; if (!p || !p.rec) return;
+    const home = homeOf();
+    const rec = p.rec;
+    const cand = home.switches.find((s) => s.id === id);
+    if (!cand) { flash("That light is gone."); state.pendingMatch = null; render(); return; }
+    if (!rec.qualifier) rec.qualifier = cand.qualifier || "";
+    if (p.editing) {
+      home.switches = home.switches.map((s) => s.id === rec.id ? { ...s, qualifier: rec.qualifier } : s);
+    } else if (!home.switches.some((s) => s.id === rec.id)) {
+      home.switches.push(rec);
+    }
+    const mates = cand.groupId ? home.switches.filter((s) => s.groupId === cand.groupId) : [cand];
+    const msg = autoJoinMatches(home, rec, mates);
+    setHome(home); state.pendingMatch = null; flash(msg); resetDraftKeepRoom();
+  }
   function renderWalk(home) {
     const d = state.draft;
     const derived = d.load ? kindForLoad(d.load === "Other" ? "Other" : d.load) : "";
@@ -774,9 +848,10 @@
     const frag = document.createElement("div");
     frag.innerHTML = `
       <div class="card"><label class="field">Home name</label><input type="text" id="homeName" placeholder="Name this house" value="${esc(home.name)}" autocomplete="off"></div>
+      ${pendingChoiceHtml(home)}
       <div class="card">
         <h2>${d.editId ? (d.loggedDumb ? "Change a regular switch" : "Edit switch") : "Add a switch"}</h2>
-        <p class="hint">Walk every switch in order. Floor and room stay put after you save. Switches that control the same light are grouped automatically as a 3-way or 4-way. If the light is not in this room, answer No under Is the light in this room? If this room has two of the same kind, use Which one?</p>
+        <p class="hint">Walk every switch in order. Floor and room stay put after you save. If this room has more than one of the same kind of light, tag it under Which one? or pick New light when asked. If this switch controls a light in another room, that option is under More.</p>
         <div class="field-wrap"><label class="field">Where the switch is</label>${chipRow("floor", FLOORS, d.floor)}<p class="hint">Floor and room are where this switch is.</p></div>
         <div class="pair-grid">
         ${selectField("Room", "room", ROOMS, d.room)}
@@ -784,15 +859,16 @@
         </div>
         ${d.room==="Other" ? `<div class="field-wrap"><label class="field">Room name</label><input type="text" data-field="roomOther" value="${esc(d.roomOther)}" placeholder="Mudroom"></div>` : ""}
         ${d.load==="Other" ? `<div class="field-wrap"><label class="field">Load name</label><input type="text" data-field="loadOther" value="${esc(d.loadOther)}" placeholder="Stair lights"></div>` : ""}
-        ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Is the light in this room?</label>${chipRow("lightInRoom", ["Yes","No"], d.lightElsewhere ? "No" : "Yes")}<p class="hint">Yes means the light is here with the switch. Most are — you can leave this as Yes. Tap No only if the light is in a different floor or room.</p></div>` : ""}
-        ${!d.loggedDumb && d.lightElsewhere ? `<div class="field-wrap"><label class="field">Where is the light?</label>${chipRow("lightFloor", FLOORS, d.lightFloor || d.floor)}</div><div class="field-wrap">${selectField("Light room", "lightRoom", ROOMS, d.lightRoom || d.room)}</div>${(d.lightRoom || d.room)==="Other" ? `<div class="field-wrap"><label class="field">Light room name</label><input type="text" data-field="lightRoomOther" value="${esc(d.lightRoomOther)}" placeholder="Stairwell"></div>` : ""}` : ""}
+
         ${isMultiFixture(d.load) ? `<div class="field-wrap"><label class="field">How many?</label>${chipRow("fixtureCount", ["1","2","3","4","5","6","7","8","8+"], (d.fixtureMany || Number(d.fixtureCount) > 8) ? "8+" : (d.fixtureCount ? String(d.fixtureCount) : ""))}${(d.fixtureMany || Number(d.fixtureCount) > 8) ? `<input type="number" data-field="fixtureCount" inputmode="numeric" min="9" step="1" value="${esc(String(d.fixtureCount || ""))}" placeholder="9 or more">` : ""}<p class="hint">Optional. How many lights this switch controls, e.g. 6 cans in a hall.</p></div>` : ""}
-        <div class="field-wrap"><label class="field">Which one? (only if this room has two)</label>${chipRow("qualifier", QUALIFIERS, d.qualifier)}<p class="hint">Skip unless the room has two switches for the same kind of light, e.g. Left/Right recessed.</p></div>
+        <div class="field-wrap"><label class="field">Which one? (only if this room has two)</label>${chipRow("qualifier", QUALIFIERS, d.qualifier)}<p class="hint">Use this when the room has more than one of the same kind of light, e.g. Island and Sink cans. The name chips are these tags.</p></div>
         ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Switch type</label>${chipRow("kindOverride", ["Dimmer","On/off","Fan"], kindChipLabel(useKind || "dimmer"))}<p class="hint">Filled in from what the switch controls. Tap once to change.</p></div>` : ""}
         ${useKind === "fan" && !d.loggedDumb ? `<div class="field-wrap"><label class="field">Fan type</label>${chipRow("fanType", FAN_TYPES, fanTypeLabel(d.fanType))}<p class="hint">AC uses a fan switch. DC uses an on/off (constant power); speed via fan remote/integration. Not sure is listed under Verify on site and stays off the order until you choose.</p></div>` : ""}
         ${d.load ? `<div class="auto">${esc(preview)} · ${esc(orderHint(d, useKind))}.${badgeHtml(draftOthers(home, d))}</div>` : ""}
         <button type="button" class="btn" id="moreToggle">${state.moreOpen ? "Hide more" : "More"}</button>
         <div id="more" class="${state.moreOpen ? "" : "hidden"}" style="margin-top:12px">
+          ${!d.loggedDumb ? `<div class="field-wrap"><button type="button" class="chip" id="lightElse" aria-pressed="${d.lightElsewhere ? "true" : "false"}">Light is in a different room</button><p class="hint">Leave this off if the light is in this room. Tap only if this switch controls a light in another floor or room.</p></div>` : ""}
+          ${!d.loggedDumb && d.lightElsewhere ? `<div class="field-wrap"><label class="field">Where is the light?</label>${chipRow("lightFloor", FLOORS, d.lightFloor || d.floor)}</div><div class="field-wrap">${selectField("Light room", "lightRoom", ROOMS, d.lightRoom || d.room)}</div>${(d.lightRoom || d.room)==="Other" ? `<div class="field-wrap"><label class="field">Light room name</label><input type="text" data-field="lightRoomOther" value="${esc(d.lightRoomOther)}" placeholder="Stairwell"></div>` : ""}` : ""}
           ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Also controlled from, optional</label>${chipRow("otherSpots", ["None","1 other spot (3-way)","2 other spots (4-way)"], otherSpotsLabel(draftOthers(home, d)))}<p class="hint">Skip this if you will log every switch. Use it only when the other end will not be logged. Linking later does not double-count.</p></div>` : ""}
           ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Where is this switch? optional</label>${chipRow("location", LOCATIONS, d.location)}<p class="hint">Optional. Tells two switches for the same light apart, e.g. top of stairs vs bottom.</p></div>` : ""}
           ${!d.loggedDumb && d.location==="Other" ? `<div class="field-wrap"><label class="field">Custom location</label><input type="text" data-field="locationOther" value="${esc(d.locationOther)}" placeholder="Landing"></div>` : ""}
@@ -1066,7 +1142,35 @@
         persist(); render();
       });
     });
+    document.getElementById("lightElse")?.addEventListener("click", () => {
+      const d = state.draft;
+      d.lightElsewhere = !d.lightElsewhere;
+      if (d.lightElsewhere) {
+        d.lightFloor = d.lightFloor || d.floor;
+        d.lightRoom = d.lightRoom || d.room;
+        state.moreOpen = true;
+      }
+      persist(); render();
+    });
     document.getElementById("moreToggle")?.addEventListener("click", () => { state.moreOpen = !state.moreOpen; render(); });
+    document.getElementById("newLight")?.addEventListener("click", () => {
+      const p = state.pendingMatch; if (!p) return;
+      const home = homeOf();
+      const rec = p.rec;
+      const used = usedLightTags(home, rec);
+      if (rec.qualifier && used.indexOf(rec.qualifier) === -1) { finishNewLight(rec.qualifier); return; }
+      p.step = "tag";
+      p.suggested = nextAutoTag(home, rec);
+      persist(); render();
+    });
+    document.getElementById("newLightOk")?.addEventListener("click", () => {
+      const p = state.pendingMatch; if (!p) return;
+      finishNewLight(p.tag || p.suggested || nextAutoTag(homeOf(), p.rec));
+    });
+    document.getElementById("pendingBack")?.addEventListener("click", () => {
+      if (state.pendingMatch) { state.pendingMatch.step = "choose"; persist(); render(); }
+    });
+    document.querySelectorAll("[data-same-light]").forEach((b) => b.addEventListener("click", () => acceptSameLight(b.getAttribute("data-same-light"))));
     document.getElementById("saveSw")?.addEventListener("click", () => saveSwitch(false));
     document.getElementById("logDumb")?.addEventListener("click", () => saveSwitch(true));
     document.getElementById("clearDraft")?.addEventListener("click", () => { const d = state.draft; state.draft = emptyDraft(d.floor, d.room); state.draft.roomOther = d.roomOther; state.pendingMatch = null; persist(); render(); });
@@ -1118,13 +1222,8 @@
     }
     else if (field === "gangSize") { state.draft.gangSize = Number(value); if (state.draft.gangPosition > state.draft.gangSize) state.draft.gangPosition = 1; }
     else if (field === "gangPosition") state.draft.gangPosition = Number(value);
-    else if (field === "lightInRoom") {
-      const elsewhere = value === "No";
-      state.draft.lightElsewhere = elsewhere;
-      if (elsewhere) {
-        state.draft.lightFloor = state.draft.lightFloor || state.draft.floor;
-        state.draft.lightRoom = state.draft.lightRoom || state.draft.room;
-      }
+    else if (field === "pendingTag") {
+      if (state.pendingMatch) state.pendingMatch.tag = (state.pendingMatch.tag === value) ? "" : value;
     }
     else if (field === "fixtureCount") {
       if (value === "8+") {
@@ -1175,6 +1274,14 @@
       groupId: d.groupId || "", switchType: "single", groupPosition: 1
     };
   }
+  function shouldAutoJoin(home, rec, exact) {
+    if (!exact.length) return false;
+    return lightIsElsewhere(rec, home);
+  }
+  function askSameOrNew(home, rec, placeMatches, editing) {
+    state.pendingMatch = { rec, candidates: uniqueLightCandidates(home, placeMatches), step: "choose", editing: !!editing };
+    persist(); render();
+  }
   function saveSwitch(asDumb) {
     const d = state.draft, home = homeOf();
     if (!d.room) { flash("Choose a room."); return; }
@@ -1197,6 +1304,17 @@
         }
         const now = home.switches.find((s) => s.id === rec.id) || rec;
         if (!now.groupId) {
+          const place = findSameLoadAndPlace(home, now);
+          const exact = place.filter((s) => groupKeyOf(s, home) === groupKeyOf(now, home) && !isSplitPair(s, now));
+          if (shouldAutoJoin(home, now, exact)) {
+            const msg = autoJoinMatches(home, now, exact);
+            setHome(home); state.pendingMatch = null; flash(msg); resetDraftKeepRoom(); return;
+          }
+          if (place.length) {
+            setHome(home);
+            askSameOrNew(home, now, place, true);
+            return;
+          }
           const matches = findMatches(home, now);
           if (matches.length) {
             const msg = autoJoinMatches(home, now, matches);
@@ -1213,12 +1331,24 @@
       return;
     }
     if (asDumb) { home.switches.push(rec); setHome(home); flash("Logged as a regular switch."); resetDraftKeepRoom(); return; }
-    home.switches.push(rec);
+    const place = findSameLoadAndPlace(home, rec);
+    const exact = place.filter((s) => groupKeyOf(s, home) === groupKeyOf(rec, home) && !isSplitPair(s, rec));
+    if (shouldAutoJoin(home, rec, exact)) {
+      home.switches.push(rec);
+      const msg = autoJoinMatches(home, rec, exact);
+      setHome(home); state.pendingMatch = null; flash(msg); resetDraftKeepRoom(); return;
+    }
+    if (place.length) {
+      askSameOrNew(home, rec, place, false);
+      return;
+    }
     const matches = findMatches(home, rec);
     if (matches.length) {
+      home.switches.push(rec);
       const msg = autoJoinMatches(home, rec, matches);
       setHome(home); state.pendingMatch = null; flash(msg); resetDraftKeepRoom(); return;
     }
+    home.switches.push(rec);
     setHome(home); state.pendingMatch = null; flash("Saved."); resetDraftKeepRoom();
   }
   function linkPending() {
@@ -1278,7 +1408,7 @@
       lightRoomOther: (sw.lightRoom && !ROOMS.includes(sw.lightRoom)) ? sw.lightRoom : "",
       groupId: sw.groupId || ""
     };
-    state.moreOpen = Boolean(sw.note || Number(sw.gangSize) > 1 || Number(sw.gangPosition) > 1 || (!sw.groupId && Number(sw.otherSpots) > 0) || sw.location);
+    state.moreOpen = Boolean(sw.note || Number(sw.gangSize) > 1 || Number(sw.gangPosition) > 1 || (!sw.groupId && Number(sw.otherSpots) > 0) || sw.location || lightIsElsewhere(sw, home) || sw.lightFloor || sw.lightRoom);
     persist(); render();
     window.scrollTo(0, 0);
   }
