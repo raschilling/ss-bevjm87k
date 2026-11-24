@@ -149,6 +149,8 @@
     return "dimmer";
   }
   function kindLabel(k) { return k === "fan" ? "Fan" : k === "onoff" ? "On/off" : "Dimmer"; }
+  function kindChipLabel(v) { return v === "onoff" ? "On/off" : v === "fan" ? "Fan" : "Dimmer"; }
+  function kindChipValue(label) { return label === "On/off" ? "onoff" : label === "Fan" ? "fan" : "dimmer"; }
   function orderHint(d, useKind) {
     if (useKind === "fan") {
       const ft = d.fanType === "ac" ? "ac" : d.fanType === "dc" ? "dc" : "unknown";
@@ -319,11 +321,11 @@
       lines.push("", "VERIFY ON SITE", "Floor,Room,Name,Why");
       s.verifyOnSite.forEach((v) => lines.push([v.floor, v.room, v.name, v.why].map(csvEscape).join(",")));
     }
-    lines.push("", "BY FLOOR / ROOM", "Floor,Room,Name,Plan,Gang,Location,Note");
+    lines.push("", "BY FLOOR / ROOM", "Floor,Room,Name,Which one,Plan,Switches in box,Location,Note");
     (home.rooms || []).forEach((room) => {
       home.switches.filter((sw) => sw.roomId === room.id).forEach((sw) => {
-        const plan = sw.groupId ? wayLabel(home.switches.filter((x) => x.groupId === sw.groupId).length) + " " + roleOf(sw, home) : (sw.loggedDumb ? "Dumb" : needsFanType(sw) ? (fanTypeOf(sw) === "ac" ? "Smart Fan (AC)" : fanTypeOf(sw) === "dc" ? "Smart On/off (DC fan, constant power)" : "Verify on site (fan type)") : "Smart " + kindLabel(shopKind(sw)));
-        lines.push([room.floor, room.name, displayName(sw, room.name), plan, sw.gangSize + " pos " + sw.gangPosition, locLabel(sw), sw.note || ""].map(csvEscape).join(","));
+        const plan = sw.groupId ? wayLabel(home.switches.filter((x) => x.groupId === sw.groupId).length) + " " + roleOf(sw, home) : (sw.loggedDumb ? "Regular (not smart)" : needsFanType(sw) ? (fanTypeOf(sw) === "ac" ? "Smart Fan (AC)" : fanTypeOf(sw) === "dc" ? "Smart On/off (DC fan, constant power)" : "Verify on site (fan type)") : "Smart " + kindLabel(shopKind(sw)));
+        lines.push([room.floor, room.name, displayName(sw, room.name), sw.qualifier || "", plan, sw.gangSize + " in box, #" + sw.gangPosition + " from left", locLabel(sw), sw.note || ""].map(csvEscape).join(","));
       });
     });
     if (s.groups.length) { lines.push("", "MULTI-WAY GROUPS", "Load,Way,Locations"); s.groups.forEach((g) => lines.push([g.name, g.way, g.locs].map(csvEscape).join(","))); }
@@ -560,11 +562,11 @@
     const frag = document.createElement("div");
     frag.innerHTML = `
       <div class="card"><label class="field">Home name</label><input type="text" id="homeName" placeholder="Name this house" value="${esc(home.name)}" autocomplete="off"></div>
-      <div class="card"><label class="field">Neutrals in this house</label><div class="chips" data-field="neutrals"></div><p class="hint">Spot-check a few boxes. You do not need a neutral at every switch.</p></div>
+      <div class="card"><label class="field">Neutrals in this house</label><div class="chips" data-field="neutrals"></div><p class="hint">A neutral is usually a white wire in the box. Check a few boxes — you do not need one at every switch.</p></div>
       ${matchHtml}
       <div class="card">
-        <h2>${d.editId ? (d.loggedDumb ? "Upgrade dumb switch" : "Edit switch") : "Add a switch"}</h2>
-        <p class="hint">Pick floor, room, and load, then gang size, and save. Reuse the same load at the other end of a 3-way. Floor and room stay put after you save.</p>
+        <h2>${d.editId ? (d.loggedDumb ? "Change a regular switch" : "Edit switch") : "Add a switch"}</h2>
+        <p class="hint">Pick floor, room, and what the switch controls, then how many switches are in this box, and save. If two switches control the same light, use the same name at both ends. Floor and room stay put after you save.</p>
         <div class="field-wrap"><label class="field">Floor</label>${chipRow("floor", FLOORS, d.floor)}</div>
         <div class="pair-grid">
         ${selectField("Room", "room", ROOMS, d.room)}
@@ -572,21 +574,21 @@
         </div>
         ${d.room==="Other" ? `<div class="field-wrap"><label class="field">Room name</label><input type="text" data-field="roomOther" value="${esc(d.roomOther)}" placeholder="Mudroom"></div>` : ""}
         ${d.load==="Other" ? `<div class="field-wrap"><label class="field">Load name</label><input type="text" data-field="loadOther" value="${esc(d.loadOther)}" placeholder="Stair lights"></div>` : ""}
-        <div class="field-wrap"><label class="field">Qualifier, optional</label>${chipRow("qualifier", QUALIFIERS, d.qualifier)}</div>
+        <div class="field-wrap"><label class="field">Which one? (only if this room has two)</label>${chipRow("qualifier", QUALIFIERS, d.qualifier)}<p class="hint">Skip unless the room has two switches for the same kind of light, e.g. Left/Right recessed.</p></div>
         ${useKind === "fan" && !d.loggedDumb ? `<div class="field-wrap"><label class="field">Fan type</label>${chipRow("fanType", FAN_TYPES, fanTypeLabel(d.fanType))}<p class="hint">AC uses a fan switch. DC uses an on/off (constant power); speed via fan remote/integration. Not sure is listed under Verify on site and stays off the order until you choose.</p></div>` : ""}
         ${d.load ? `<div class="auto">${esc(preview)} · ${esc(orderHint(d, useKind))}.</div>` : ""}
-        ${showLoc ? `<div class="field-wrap"><label class="field">Paddle location, for this multi-way</label>${chipRow("location", LOCATIONS, d.location)}</div>` : ""}
+        ${showLoc ? `<div class="field-wrap"><label class="field">Where is this switch?</label>${chipRow("location", LOCATIONS, d.location)}<p class="hint">Used to tell two or more switches for the same light apart, e.g. top of stairs vs bottom.</p></div>` : ""}
         ${showLoc && d.location==="Other" ? `<div class="field-wrap"><label class="field">Custom location</label><input type="text" data-field="locationOther" value="${esc(d.locationOther)}" placeholder="Landing"></div>` : ""}
-        <div class="field-wrap"><label class="field">Switches in this box</label>${chipRow("gangSize", ["1","2","3","4"], String(d.gangSize))}</div>
-        ${d.gangSize > 1 ? `<div class="field-wrap"><label class="field">Position, left to right</label>${chipRow("gangPosition", Array.from({length:d.gangSize},(_,i)=>String(i+1)), String(d.gangPosition))}</div>` : ""}
+        <div class="field-wrap"><label class="field">Switches in this box</label>${chipRow("gangSize", ["1","2","3","4"], String(d.gangSize))}<p class="hint">How many switches share this wall box, including this one.</p></div>
+        ${d.gangSize > 1 ? `<div class="field-wrap"><label class="field">Which slot, left to right?</label>${chipRow("gangPosition", Array.from({length:d.gangSize},(_,i)=>String(i+1)), String(d.gangPosition))}<p class="hint">Count from the left as you face the wall.</p></div>` : ""}
         <button type="button" class="btn" id="moreToggle">${state.moreOpen ? "Hide more" : "More"}</button>
         <div id="more" class="${state.moreOpen ? "" : "hidden"}" style="margin-top:12px">
-          <div class="field-wrap"><label class="field">Device type, if the load is wrong</label>${chipRow("kindOverride", ["dimmer","onoff","fan"], d.kindOverride || useKind)}</div>
+          <div class="field-wrap"><label class="field">Switch type, if the usual choice is wrong</label>${chipRow("kindOverride", ["Dimmer","On/off","Fan"], kindChipLabel(d.kindOverride || useKind))}<p class="hint">Most lights order as a dimmer, fans as a fan switch, and a few as on/off. Change this only if that is wrong.</p></div>
           <div class="field-wrap"><label class="field">Note, optional</label><textarea data-field="note" placeholder="Traveler colors, leftover questions">${esc(d.note)}</textarea></div>
         </div>
         <div class="stack" style="margin-top:12px">
-          <button type="button" class="btn" id="logDumb">Log as dumb (quick)</button>
-          <button type="button" class="btn primary" id="saveSw">${d.editId ? (d.loggedDumb ? "Save as smart" : "Save changes") : "Save switch"}</button>
+          <button type="button" class="btn" id="logDumb">Leave as a regular switch</button>
+          <button type="button" class="btn primary" id="saveSw">${d.editId ? (d.loggedDumb ? "Save as a smart switch" : "Save changes") : "Save switch"}</button>
           <div class="row">
             <button type="button" class="btn" id="clearDraft">Clear for next switch</button>
             ${d.editId ? `<button type="button" class="btn danger" id="deleteSw">Delete switch</button>` : ""}
@@ -615,9 +617,9 @@
       groups.forEach((members) => {
         const first = members[0];
         const load = first.load === "Other" ? (first.loadOther || "Other") : first.load;
-        html += `<div class="card mw"><strong>${esc(load)}</strong><p class="hint">${esc(wayLabel(members.length))}, ${members.length} locations. Role is a starting guess; the electrician confirms which box is the line/main at install.</p>`;
+        html += `<div class="card mw"><strong>${esc(load)}</strong><p class="hint">${esc(wayLabel(members.length))}, ${members.length} locations. “Main” is a starting guess for the smart switch; the electrician confirms which box has the incoming power.</p>`;
         members.forEach((m, i) => {
-          html += `<div class="row" style="margin-bottom:8px"><button type="button" class="list-item" data-edit="${m.id}"><strong>${i+1} of ${members.length} · ${esc(locLabel(m) || roomNameOf(m, home))}</strong><span>${esc(roleOf(m, home))} · ${esc(roomNameOf(m, home))}${locLabel(m) ? " · " + esc(locLabel(m)) : ""}</span></button><button type="button" class="btn" data-unlink="${m.id}">Unlink</button></div>`;
+          html += `<div class="row" style="margin-bottom:8px"><button type="button" class="list-item" data-edit="${m.id}"><strong>${i+1} of ${members.length} · ${esc(locLabel(m) || roomNameOf(m, home))}</strong><span>${esc(roleOf(m, home) === "Companion" ? "Extra switch" : "Main (smart)")} · ${esc(roomNameOf(m, home))}${locLabel(m) ? " · " + esc(locLabel(m)) : ""}</span></button><button type="button" class="btn" data-unlink="${m.id}">Unlink</button></div>`;
         });
         html += `</div>`;
       });
@@ -625,12 +627,12 @@
     }
     if (smart.length) {
       html += `<div class="card"><h2>Smart switches in ${esc(floor)} ${esc(room)}</h2><div class="stack">`;
-      smart.forEach((s) => { html += `<button type="button" class="list-item" data-edit="${s.id}"><strong>${esc(displayName(s, room))}</strong><span>${s.gangPosition} of ${s.gangSize} · ${esc(kindLabel(shopKind(s)))}</span></button>`; });
+      smart.forEach((s) => { html += `<button type="button" class="list-item" data-edit="${s.id}"><strong>${esc(displayName(s, room))}</strong><span>${s.gangPosition} of ${s.gangSize} in the box · ${esc(kindLabel(shopKind(s)))}</span></button>`; });
       html += `</div></div>`;
     }
     if (dumb.length) {
-      html += `<div class="card"><h2>Dumb switches in ${esc(floor)} ${esc(room)}</h2><div class="stack">`;
-      dumb.forEach((s) => { html += `<button type="button" class="list-item dumb" data-edit="${s.id}"><strong>${esc(displayName(s, room))}</strong><span>Dumb · tap to upgrade</span></button>`; });
+      html += `<div class="card"><h2>Regular switches in ${esc(floor)} ${esc(room)}</h2><div class="stack">`;
+      dumb.forEach((s) => { html += `<button type="button" class="list-item dumb" data-edit="${s.id}"><strong>${esc(displayName(s, room))}</strong><span>Regular (not smart) · tap to change</span></button>`; });
       html += `</div></div>`;
     }
     const box = document.createElement("div"); box.innerHTML = html; return box;
@@ -648,10 +650,11 @@
         <table><thead><tr><th>Item</th><th>Qty</th><th>Part</th></tr></thead>
         <tbody>${rows.length ? rows.map((r)=>`<tr><td>${esc(r.item)}</td><td>${r.qty}</td><td>${esc(r.part)}</td></tr>`).join("") : "<tr><td colspan=3>None yet</td></tr>"}</tbody></table>
         ${notes && notes.length ? notes.map((n)=>`<p class="hint">${esc(n)}</p>`).join("") : ""}
-        <p class="hint">${s.dumb} dumb switch${s.dumb===1?"":"es"} (not ordered). ${s.locations} location${s.locations===1?"":"s"} logged.</p></div>
+        ${s.companion ? `<p class="hint">Companions are the extra switches in a 3-way or 4-way. Only one smart main is needed per light.</p>` : ""}
+        <p class="hint">${s.dumb} regular (not smart) switch${s.dumb===1?"":"es"} (not ordered). ${s.locations} location${s.locations===1?"":"s"} logged.</p></div>
       <div class="summary-side">
       ${s.verifyOnSite && s.verifyOnSite.length ? `<div class="card"><h2>Verify on site</h2>${s.verifyOnSite.map((v)=>`<p><strong>${esc(v.name)}</strong><br><span class="sub">${esc(v.floor)} ${esc(v.room)} · ${esc(v.why)}</span></p>`).join("")}</div>` : ""}
-      ${s.groups.length ? `<div class="card"><h2>Multi-way groups</h2>${s.groups.map((g)=>`<p><strong>${esc(g.name)}</strong> · ${esc(g.way)}<br><span class="sub">${esc(g.locs)}</span></p>`).join("")}<p class="hint">Role is a starting guess. The electrician confirms which box is the line/main at install.</p></div>` : ""}
+      ${s.groups.length ? `<div class="card"><h2>Multi-way groups</h2>${s.groups.map((g)=>`<p><strong>${esc(g.name)}</strong> · ${esc(g.way)}<br><span class="sub">${esc(g.locs)}</span></p>`).join("")}<p class="hint">“Main” is a starting guess for the smart switch. The electrician confirms which box has the incoming power.</p></div>` : ""}
       ${s.issues.length ? `<div class="card"><h2>Open issues</h2>${s.issues.map((i)=>`<p>${esc(i)}</p>`).join("")}</div>` : ""}
       <div class="card"><h2>Export this home</h2><div class="stack">
         <button type="button" class="btn primary" id="exportJson">Export JSON backup</button>
@@ -776,7 +779,7 @@
     }
     if (field === "qualifier" && state.draft.qualifier === value) state.draft.qualifier = "";
     else if (field === "location" && state.draft.location === value) state.draft.location = "";
-    else if (field === "kindOverride") state.draft.kindOverride = value;
+    else if (field === "kindOverride") state.draft.kindOverride = kindChipValue(value);
     else if (field === "fanType") state.draft.fanType = fanTypeValue(value);
     else if (field === "gangSize") { state.draft.gangSize = Number(value); if (state.draft.gangPosition > state.draft.gangSize) state.draft.gangPosition = 1; }
     else if (field === "gangPosition") state.draft.gangPosition = Number(value);
@@ -814,10 +817,10 @@
       if (asDumb && rec.groupId) home.switches = unlinkMember(home.switches, rec.id);
       if (!asDumb && rec.groupId) home.switches = applyGroup(home.switches, rec.groupId);
       setHome(home);
-      if (asDumb) { flash("Saved as dumb."); resetDraftKeepRoom(); return; }
+      if (asDumb) { flash("Saved as a regular switch."); resetDraftKeepRoom(); return; }
       state.pendingMatch = null; persist(); flash("Saved."); render(); return;
     }
-    if (asDumb) { home.switches.push(rec); setHome(home); flash("Logged as dumb."); resetDraftKeepRoom(); return; }
+    if (asDumb) { home.switches.push(rec); setHome(home); flash("Logged as a regular switch."); resetDraftKeepRoom(); return; }
     const matches = findMatches(home, rec);
     if (matches.length && !rec.groupId) { state.pendingMatch = { rec, matches }; persist(); render(); return; }
     home.switches.push(rec); setHome(home); flash("Saved."); resetDraftKeepRoom();

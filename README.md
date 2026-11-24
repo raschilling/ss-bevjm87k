@@ -6,6 +6,8 @@ There is no login. Everything you enter stays in this browser and is saved autom
 
 Use **Homes** to add or switch surveys, load the sample house, and export or import a JSON backup. **Summary** has the order list and CSV export. Share sends the survey data, not just this link.
 
+On the walk, skip **Which one?** unless a room has two switches for the same kind of light (for example Left and Right recessed). Companions on the order list are the extra switches in a 3-way or 4-way.
+
 If you forget the PIN you cannot export while locked. Resetting the PIN erases the data on this device unless you already have a JSON backup.
 
 This URL is unlisted. Please do not post it in a public place.
