@@ -2,6 +2,7 @@
 import asyncio, json, os, sys
 from pathlib import Path
 from playwright.async_api import async_playwright
+from verify_helpers import choose_load, pick_existing_light, open_more, set_other_spots, show_parts
 
 BASE = os.environ.get("SS_BASE", "http://127.0.0.1:8776/index.html")
 OUT = Path(os.environ.get("SS_OUT", "/workspace/switch-survey/verify/plain-storage"))
@@ -112,7 +113,7 @@ async def run():
 
         # Save a switch, reload, still there, no unlock
         await page.select_option("select[data-field='room']", "Kitchen")
-        await page.select_option("select[data-field='load']", "Can lights")
+        await choose_load(page, "Can lights")
         await page.wait_for_timeout(80)
         await page.click("#saveSw")
         await page.wait_for_timeout(200)
