@@ -10,7 +10,7 @@ Private, phone-first survey for ordering smart switches. Single-file app. No log
 
 Safari is required for reliable save. Chrome or a Files preview may evict data.
 
-If this phone already has a survey that was locked, you will be asked for the old PIN once. After that, the survey is saved in plain form on this phone and will not ask again.
+If this browser still has a survey from the previous version, you can enter the old 4–6 digit lock code once to move it, or skip and start fresh. You can import a JSON backup afterward. After a move, the survey is saved in plain form and will not ask again.
 
 ## Features
 

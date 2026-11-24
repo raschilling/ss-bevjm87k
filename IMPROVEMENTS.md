@@ -137,3 +137,20 @@ If a phone still has the older encrypted PIN copy (`switchSurvey.meta.v1`), the 
 S11 and the other reload checks now confirm the survey comes back with no unlock step. `verify_plain_storage.py` seeds an encrypted home, unlocks it once, and asserts the homes, switches, and JSON export are kept, then that a second reload stays unlocked.
 
 CSV/JSON import and export, noindex, and robots.txt are unchanged.
+
+## 2026-11-24 — Stale desktop cache, one-time move, Keep as is
+
+Andrew still saw a PIN screen on his desktop browser. The plain GitHub Pages URL was already serving the no-PIN build (`35f64c78`, 106185 bytes). There was no service worker and no web-app manifest. GitHub Pages caches HTML for 10 minutes (`Cache-Control: max-age=600`). Two things could still show a PIN-like screen on desktop:
+
+1. A tab or browser cache holding the previous HTML (setup / unlock).
+2. The one-time migration keypad for older encrypted data, which looked like the old **Enter PIN** screen, so it seemed as if the PIN had not been removed.
+
+Decryption of that older copy still needs the old 4–6 digit code; there is no way to open it without it. The screen is now **Move your old survey (one time)**, explains that this is a one-time move of old data, and has an obvious **Skip, start fresh** path (a JSON backup can be imported afterward). Visible “PIN” wording is gone from the app, Summary, export, and the README.
+
+To force a stale desktop or home-screen copy to update: a `ss-version` meta plus a cache-busting version check (fetch with `cache: "no-store"` and reload once if a newer version is on the network), `Cache-Control` / Pragma no-cache meta, unregister of any unexpected service worker, and a network-only `sw.js` with `skipWaiting` and `clients.claim` so later updates apply immediately.
+
+**Regular switch** is now **Keep as is (not smart)** on the form button, the survey list, Summary, and the CSV Plan column. The stored key is still `loggedDumb`, so older surveys stay compatible. Tests click `#logDumb` as before.
+
+
+Survey order no longer shows a shared **3-way (2 locations)** or **4-way (3 locations)** badge on every switch in a group. Each switch gets its own place in walk order, for example **3-way 1/2** and **3-way 2/2**, or **4-way 1/3**, **4-way 2/3**, **4-way 3/3**. A single switch has no badge. The labels recompute when you unlink, merge, or delete, including a declared-only 3-way or 4-way that has not logged the other ends yet (shown as **3-way 1/2** or **4-way 1/3**). Summary still uses the group-level “N locations” badge.
+

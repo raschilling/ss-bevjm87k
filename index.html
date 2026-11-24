@@ -13,6 +13,10 @@
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
   <meta name="robots" content="noindex, nofollow, noarchive">
   <meta name="description" content="Private switch survey.">
+  <meta name="ss-version" content="2026-11-24d">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <style>
     :root {
       color-scheme: light dark;
@@ -134,6 +138,7 @@
 (() => {
   const META_KEY = "switchSurvey.meta.v1";
   const DATA_KEY = "switchSurvey.data.v2";
+  const APP_VERSION = "2026-11-24d";
   const ITERATIONS = 150000;
   const FLOORS = ["Basement","Main","Upper","Exterior"];
   const INDOOR_ROOMS = ["Bedroom","Closet","Dining room","Family room","Foyer","Garage","Guest bath","Half bath","Hall","Kitchen","Laundry","Living room","Office","Primary bath","Primary bedroom","Stairs","Other"];
@@ -589,6 +594,18 @@
     const label = wayBadge(others);
     return label ? ` <span class="badge-way">${esc(label)}</span>` : "";
   }
+  function wayPositionLabel(sw, home) {
+    const others = effectiveOthers(sw, home);
+    const kind = others >= 2 ? "4-way" : others === 1 ? "3-way" : "";
+    if (!kind) return "";
+    const members = membersOf(sw, home);
+    const idx = Math.max(0, members.findIndex((m) => m.id === sw.id));
+    return kind + " " + (idx + 1) + "/" + (others + 1);
+  }
+  function positionBadgeHtml(sw, home) {
+    const label = wayPositionLabel(sw, home);
+    return label ? ` <span class="badge-way">${esc(label)}</span>` : "";
+  }
   function draftOthers(home, d) {
     let linked = 0;
     if (d.groupId) linked = Math.max(0, (home.switches || []).filter((s) => s.groupId === d.groupId).length - 1);
@@ -732,7 +749,7 @@
     (home.rooms || []).forEach((room) => {
       home.switches.filter((sw) => sw.roomId === room.id).forEach((sw) => {
         const others = effectiveOthers(sw, home);
-        const plan = (others ? wayBadge(others) + " " + (roleOf(sw, home) || "Main") : "") || (sw.groupId ? wayLabel(home.switches.filter((x) => x.groupId === sw.groupId).length) + " " + roleOf(sw, home) : (sw.loggedDumb ? "Regular (not smart)" : needsFanType(sw) ? (fanTypeOf(sw) === "ac" ? "Smart Fan (AC)" : fanTypeOf(sw) === "dc" ? "Smart On/off (DC fan, constant power)" : "Verify on site (fan type)") : "Smart " + kindLabel(shopKind(sw))));
+        const plan = (others ? wayBadge(others) + " " + (roleOf(sw, home) || "Main") : "") || (sw.groupId ? wayLabel(home.switches.filter((x) => x.groupId === sw.groupId).length) + " " + roleOf(sw, home) : (sw.loggedDumb ? "Keep as is (not smart)" : needsFanType(sw) ? (fanTypeOf(sw) === "ac" ? "Smart Fan (AC)" : fanTypeOf(sw) === "dc" ? "Smart On/off (DC fan, constant power)" : "Verify on site (fan type)") : "Smart " + kindLabel(shopKind(sw))));
         lines.push([room.floor, room.name, displayName(sw, room.name), sw.qualifier || "", fixtureCountOf(sw) || "", plan, otherSpotsLabel(others), switchVsLight(sw, home), sw.gangSize + " in box, #" + sw.gangPosition + " from left", locLabel(sw), sw.note || ""].map(csvEscape).join(","));
       });
     });
@@ -1018,12 +1035,14 @@
     let extra = "";
     if (!state.storageOk && state.storageNote) extra += `<div class="banner danger">${esc(state.storageNote)}</div>`;
     if (state.migrateError) extra += `<div class="banner danger">${esc(state.migrateError)}</div>`;
-    if (state.migrateForgot === 0) extra += `<button type="button" class="btn quiet" id="migrateForgot">I don't have that PIN</button>`;
-    if (state.migrateForgot === 1) extra += `<div class="banner warn">The locked survey on this phone cannot be opened without that PIN. Starting fresh erases it. If you have a JSON backup, you can import it after.</div><div class="row"><button type="button" class="btn" id="migrateForgotCancel">Cancel</button><button type="button" class="btn danger" id="migrateForgotWarn">I understand, continue</button></div>`;
-    if (state.migrateForgot === 2) extra += `<div class="banner danger">Last step: erase the locked survey on this phone and start fresh?</div><div class="row"><button type="button" class="btn" id="migrateForgotCancel">Cancel</button><button type="button" class="btn danger" id="migrateForgotConfirm">Erase locked survey and start fresh</button></div>`;
+    if (state.migrateForgot === 0) {
+      extra += `<div class="stack" style="margin-top:12px"><button type="button" class="btn" id="migrateSkip">Skip, start fresh</button></div>`;
+    } else {
+      extra += `<div class="banner warn">Starting fresh erases the locked survey in this browser. If you have a JSON backup, you can import it after.</div><div class="row"><button type="button" class="btn" id="migrateSkipCancel">Cancel</button><button type="button" class="btn danger" id="migrateSkipConfirm">Erase locked survey and start fresh</button></div>`;
+    }
     const wrap = document.createElement("div");
     wrap.className = "lock";
-    wrap.innerHTML = `<div class="topbar"><div><h1>Switch Survey</h1><div class="sub">This phone already has a survey that was locked with a PIN. Enter that PIN once to keep your homes and switches. After this, it stays saved on this phone and will not ask again.</div></div></div><div class="card" id="migrateUnlock"><h2>Open your saved survey</h2><div class="dots">${dots}</div><div class="keypad" id="keypad">${keys.map((k) => `<button type="button" class="key" data-key="${esc(k)}">${k}</button>`).join("")}</div>${extra}</div>`;
+    wrap.innerHTML = `<div class="topbar"><div><h1>Switch Survey</h1><div class="sub">This browser still has a survey from the previous version. That copy was locked, so the old 4–6 digit code is needed once to move your homes here. After this, Switch Survey will not ask for a code. If this was only a test, skip and start fresh. You can import a JSON backup afterward.</div></div></div><div class="card" id="migrateUnlock"><h2>Move your old survey (one time)</h2><div class="dots">${dots}</div><div class="keypad" id="keypad">${keys.map((k) => `<button type="button" class="key" data-key="${esc(k)}">${k}</button>`).join("")}</div>${extra}</div>`;
     return wrap;
   }
   function renderMain() {
@@ -1100,7 +1119,7 @@
     frag.innerHTML = `
       ${pendingChoiceHtml(home)}
       <div class="card">
-        ${headingInfo(d.editId ? (d.loggedDumb ? "Change a regular switch" : "Edit switch") : "Add a switch", "addSwitch", "Survey every switch in order. Floor and room stay put after you save. If this room already has the same kind of light, you will be asked whether it is the same light or a new one. For a new one, pick a short name like Island or Sink. To add another switch for a light you already logged, even in another room, tap its name in the list of lights already logged.")}
+        ${headingInfo(d.editId ? (d.loggedDumb ? "Change keep as is (not smart)" : "Edit switch") : "Add a switch", "addSwitch", "Survey every switch in order. Floor and room stay put after you save. If this room already has the same kind of light, you will be asked whether it is the same light or a new one. For a new one, pick a short name like Island or Sink. To add another switch for a light you already logged, even in another room, tap its name in the list of lights already logged.")}
         <div class="field-wrap">${fieldHead("Where the switch is", "floor", "Floor and room are where this switch is.")}${chipRow("floor", FLOORS, d.floor)}</div>
         <div class="pair-grid">
         ${selectField("Room", "room", roomsForFloor(d.floor), d.room)}
@@ -1124,7 +1143,7 @@
         <div class="stack" style="margin-top:8px">
           <div class="row">
             <button type="button" class="btn" id="moreToggle">${state.moreOpen ? "Hide more" : "More"}</button>
-            <button type="button" class="btn" id="logDumb">Regular switch</button>
+            <button type="button" class="btn" id="logDumb">Keep as is (not smart)</button>
           </div>
           <button type="button" class="btn primary" id="saveSw">${d.editId ? (d.loggedDumb ? "Save as a smart switch" : "Save changes") : "Save switch"}</button>
           <div class="row">
@@ -1138,14 +1157,13 @@
   }
   function renderSavedLists(home) {
     if (!home.switches.length) { const empty = document.createElement("div"); return empty; }
-    let html = `<div class="card">${headingInfo("Survey order", "surveyOrder", "In the order you saved them. Switches for the same light are grouped automatically and show a 3-way or 4-way badge.")}<div class="stack">`;
+    let html = `<div class="card">${headingInfo("Survey order", "surveyOrder", "In the order you saved them. Switches for the same light are grouped automatically. Each one shows its place in the group, like 3-way 1/2 or 4-way 2/3. A single switch has no badge.")}<div class="stack">`;
     home.switches.forEach((s, i) => {
-      const others = effectiveOthers(s, home);
-      const badge = isSmart(s) ? badgeHtml(others) : "";
+      const badge = isSmart(s) ? positionBadgeHtml(s, home) : "";
       const vs = switchVsLight(s, home);
       const sub = [
         locPair(s.floor, roomNameOf(s, home)),
-        isSmart(s) ? ((roleOf(s, home) === "Companion" ? "Extra switch" : "Smart") + " " + kindLabel(shopKind(s))) : "Regular (not smart)",
+        isSmart(s) ? ((roleOf(s, home) === "Companion" ? "Extra switch" : "Smart") + " " + kindLabel(shopKind(s))) : "Keep as is (not smart)",
         locLabel(s),
         vs
       ].filter(Boolean).join(" · ");
@@ -1263,7 +1281,7 @@
         <tbody>${rows.length ? rows.map((r)=>`<tr><td>${esc(r.item)}</td><td>${r.qty}</td><td>${esc(r.part)}</td></tr>`).join("") : "<tr><td colspan=3>None yet</td></tr>"}</tbody></table>
         ${notes && notes.length ? notes.map((n)=>`<p class="hint">${esc(n)}</p>`).join("") : ""}
         ${s.companion ? fieldHead("Companions", "companions", "Companions are the extra switches in a 3-way or 4-way. Only one smart main is needed per light.") : ""}
-        <p class="hint">${s.dumb} regular (not smart) switch${s.dumb===1?"":"es"} (not ordered). ${s.locations} location${s.locations===1?"":"s"} logged.</p></div>
+        <p class="hint">${s.dumb} Keep as is (not smart)${s.dumb===1?"":" switches"} (not ordered). ${s.locations} location${s.locations===1?"":"s"} logged.</p></div>
       <div class="summary-side">
       ${s.verifyOnSite && s.verifyOnSite.length ? `<div class="card"><h2>Verify on site</h2>${s.verifyOnSite.map((v)=>`<p><strong>${esc(v.name)}</strong><br><span class="sub">${esc(v.floor)} ${esc(v.room)} · ${esc(v.why)}</span></p>`).join("")}</div>` : ""}
       ${s.groups.length ? `<div class="card">${headingInfo("3-way and 4-way", "groups", "Detected automatically from the same light. A 3-way is two locations (1 smart switch + 1 companion). A 4-way is three locations (1 smart switch + 2 companions). Unlink or merge here if a group is wrong. “Main” is a starting guess for the smart switch.")}${s.groups.map((g)=>summaryGroupHtml(g, home)).join("")}</div>` : ""}
@@ -1304,10 +1322,9 @@
 
   function bindMigrate() {
     document.getElementById("keypad")?.addEventListener("click", onMigrateKey);
-    document.getElementById("migrateForgot")?.addEventListener("click", () => { state.migrateForgot = 1; render(); });
-    document.getElementById("migrateForgotCancel")?.addEventListener("click", () => { state.migrateForgot = 0; render(); });
-    document.getElementById("migrateForgotWarn")?.addEventListener("click", () => { state.migrateForgot = 2; render(); });
-    document.getElementById("migrateForgotConfirm")?.addEventListener("click", () => { startFreshFromLocked(); render(); });
+    document.getElementById("migrateSkip")?.addEventListener("click", () => { state.migrateForgot = 1; render(); });
+    document.getElementById("migrateSkipCancel")?.addEventListener("click", () => { state.migrateForgot = 0; render(); });
+    document.getElementById("migrateSkipConfirm")?.addEventListener("click", () => { startFreshFromLocked(); render(); });
   }
   function paintMigrateDots() {
     const buf = state.migrateBuf || "";
@@ -1334,11 +1351,11 @@
     try {
       const ok = await migrateWithPin(attempt);
       if (!ok) {
-        state.migrateError = "That PIN did not work. Try again, or start fresh if you do not have it.";
+        state.migrateError = "That code did not work. Try again, or skip and start fresh.";
         render();
         return;
       }
-      flash("Your survey is saved on this phone now, without a lock.");
+      flash("Your survey is saved in this browser now, and will not ask for a code.");
       render();
     } catch (e) {
       state.migrating = true;
@@ -1606,11 +1623,11 @@
       }
       setHome(home);
       state.pendingMatch = null;
-      flash(asDumb ? "Saved as a regular switch." : "Saved.");
+      flash(asDumb ? "Saved as keep as is (not smart)." : "Saved.");
       resetDraftKeepRoom();
       return;
     }
-    if (asDumb) { home.switches.push(rec); setHome(home); flash("Logged as a regular switch."); resetDraftKeepRoom(); return; }
+    if (asDumb) { home.switches.push(rec); setHome(home); flash("Logged as keep as is (not smart)."); resetDraftKeepRoom(); return; }
     if (state.draft.pickedLightId) {
       const msg = joinToPicked(home, rec);
       if (msg) { setHome(home); state.pendingMatch = null; flash(msg === "Saved." ? "Saved." : msg); resetDraftKeepRoom(); return; }
@@ -1777,19 +1794,68 @@
     };
     reader.readAsText(file);
   }
+  async function ensureFreshVersion() {
+    try {
+      if (sessionStorage.getItem("ss.versionReloaded") === APP_VERSION) return false;
+    } catch (e) {}
+    try {
+      const q = "ssver=" + encodeURIComponent(APP_VERSION) + "&t=" + Date.now();
+      const res = await fetch(location.pathname.replace(/\/+$/, "/") + "?" + q, { cache: "no-store", headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" } });
+      const text = await res.text();
+      const m = text.match(/meta\s+name=["']ss-version["']\s+content=["']([^"']+)["']/i)
+        || text.match(/content=["']([^"']+)["']\s+name=["']ss-version["']/i);
+      if (m && m[1] && m[1] !== APP_VERSION) {
+        try { sessionStorage.setItem("ss.versionReloaded", m[1]); } catch (e) {}
+        location.replace(location.pathname + "?ssver=" + encodeURIComponent(m[1]));
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+  async function setupServiceWorker() {
+    if (!("serviceWorker" in navigator) || !/^https?:$/.test(location.protocol)) return;
+    try {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const r of regs) {
+        const url = (r.active && r.active.scriptURL) || (r.installing && r.installing.scriptURL) || (r.waiting && r.waiting.scriptURL) || "";
+        if (!/\/sw\.js/.test(url)) {
+          try { await r.unregister(); } catch (e) {}
+        }
+      }
+      const swUrl = new URL("sw.js", location.href).href + "?v=" + encodeURIComponent(APP_VERSION);
+      const reg = await navigator.serviceWorker.register(swUrl, { scope: "./" });
+      if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        try {
+          if (sessionStorage.getItem("ss.swReloaded") === APP_VERSION) return;
+          sessionStorage.setItem("ss.swReloaded", APP_VERSION);
+        } catch (e) {}
+        location.reload();
+      });
+    } catch (e) {}
+  }
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyChrome);
   applyChrome();
-  probeStorage();
-  bootFromStorage();
   if (["127.0.0.1","localhost"].includes(location.hostname)) {
     window.__ss = {
       isMigrating() { return !!state.migrating; },
       hasEncryptedMeta() { return hasEncryptedMeta(); },
       hasPlainData() { return hasPlainData(); },
+      appVersion() { return APP_VERSION; },
       counts() { const h = homeOf(); return h ? summaryOf(h) : null; }
     };
   }
-  render();
+  (async function boot() {
+    const reloading = await ensureFreshVersion();
+    if (reloading) return;
+    probeStorage();
+    bootFromStorage();
+    if (!["127.0.0.1","localhost"].includes(location.hostname)) setupServiceWorker();
+    else if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then((regs) => regs.forEach((r) => r.unregister())).catch(() => {});
+    }
+    render();
+  })();
 })();
 </script>
 </body>
