@@ -2,6 +2,11 @@
 import re
 
 async def choose_load(page, load):
+    item = page.locator(f'[data-pick-load="{load}"]')
+    if await item.count() and await item.first.is_visible():
+        await item.first.click()
+        await page.wait_for_timeout(80)
+        return
     inp = page.locator("#loadQuery")
     await inp.click()
     await inp.fill(load)
@@ -12,15 +17,20 @@ async def choose_load(page, load):
     else:
         await inp.press("Enter")
     await page.wait_for_timeout(80)
-    if await page.locator("#loadSuggest:not(.hidden)").count():
-        await page.locator("h1").click()
-        await page.wait_for_timeout(80)
 
 async def pick_existing_light(page, contains):
-    inp = page.locator("#loadQuery")
-    await inp.click()
-    await page.wait_for_timeout(80)
-    await page.wait_for_selector("#loadSuggest:not(.hidden) [data-pick-light]", timeout=4000)
+    chips = page.locator("[data-pick-light]")
+    visible = False
+    if await chips.count():
+        for i in range(await chips.count()):
+            if await chips.nth(i).is_visible():
+                visible = True
+                break
+    if not visible:
+        inp = page.locator("#loadQuery")
+        await inp.click()
+        await page.wait_for_timeout(80)
+    await page.wait_for_selector("[data-pick-light]", state="visible", timeout=4000)
     chips = page.locator("[data-pick-light]")
     n = await chips.count()
     needle = contains.lower()

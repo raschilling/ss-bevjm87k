@@ -13,7 +13,7 @@
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
   <meta name="robots" content="noindex, nofollow, noarchive">
   <meta name="description" content="Private switch survey.">
-  <meta name="ss-version" content="2026-11-24e">
+  <meta name="ss-version" content="2026-11-24f">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -125,21 +125,35 @@
     }
 
     .banner { position: sticky; top: 0; z-index: 20; }
+    .field-wrap, .card { min-width: 0; max-width: 100%; }
     .suggest {
-      margin-top: 6px; border: 1.5px solid var(--line); border-radius: 12px;
-      background: var(--paper); max-height: 220px; overflow-y: auto;
+      margin-top: 6px; display: flex; flex-wrap: nowrap; gap: 6px;
+      border: 0; background: transparent; max-height: none;
+      max-width: 100%; min-width: 0; box-sizing: border-box;
+      overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch;
+      padding: 2px 0 4px;
     }
+    .suggest .suggest-item { flex: 0 0 auto; }
     .suggest-label {
-      font-size: .8rem; font-weight: 700; color: var(--muted);
-      margin: 0; padding: 8px 10px 4px;
+      flex: 1 0 100%; font-size: .8rem; font-weight: 700; color: var(--muted);
+      margin: 0; padding: 2px 0 0;
     }
     .suggest-item {
-      appearance: none; display: block; width: 100%; text-align: left;
-      border: 0; border-top: 1px solid var(--line); background: transparent;
-      color: var(--ink); padding: 10px 12px; min-height: 40px; font: inherit; cursor: pointer;
+      appearance: none; display: inline-flex; align-items: center; width: auto;
+      text-align: left; border: 1.5px solid var(--line); border-radius: 999px;
+      background: var(--chip); color: var(--ink); padding: 4px 10px;
+      min-height: 32px; font: inherit; font-weight: 600; cursor: pointer;
     }
-    .suggest-item:first-child, .suggest-label + .suggest-item { border-top: 0; }
-    .suggest-item[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 16%, var(--paper)); }
+    .suggest-item[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 16%, var(--paper)); border-color: var(--accent); }
+    .same-light-suggest { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .same-light-suggest:empty { display: none; }
+    .same-light-chip {
+      appearance: none; display: inline-flex; align-items: center; width: auto;
+      text-align: left; border: 1.5px solid var(--accent); border-radius: 12px;
+      background: color-mix(in srgb, var(--accent) 12%, var(--paper)); color: var(--ink);
+      padding: 6px 10px; min-height: 36px; font: inherit; font-weight: 650; cursor: pointer;
+    }
+    .same-light-chip[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 22%, var(--paper)); }
     .prompt-card { margin: 8px 0 10px; }
     .btn-unlink {
       appearance: none; flex: 0 0 auto; align-self: center;
@@ -195,7 +209,7 @@
 (() => {
   const META_KEY = "switchSurvey.meta.v1";
   const DATA_KEY = "switchSurvey.data.v2";
-  const APP_VERSION = "2026-11-24e";
+  const APP_VERSION = "2026-11-24f";
   const ITERATIONS = 150000;
   const FLOORS = ["Basement","Main","Upper","Exterior"];
   const INDOOR_ROOMS = ["Bedroom","Closet","Dining room","Family room","Foyer","Garage","Guest bath","Half bath","Hall","Kitchen","Laundry","Living room","Office","Primary bath","Primary bedroom","Stairs","Other"];
@@ -553,36 +567,68 @@
     if (!q) return true;
     return String(name || "").toLowerCase().indexOf(q) !== -1;
   }
-  function loadSuggestInner(home, d) {
-    const raw = state.loadTyping ? (d.loadQuery || "") : loadDisplayValue(d);
-    const qLow = String(raw || "").trim().toLowerCase();
+  function loadQueryText(d) {
+    return String(state.loadTyping ? (d.loadQuery || "") : loadDisplayValue(d) || "").trim();
+  }
+  function sameLightSuggestLabel(sw, home) {
+    const name = (sw.qualifier || (sw.load === "Other" ? (sw.loadOther || "light") : (sw.load || "light"))).trim();
+    const floor = lightFloorOf(sw);
+    const room = lightRoomOf(sw, home);
+    const place = (!floor || floor === "Main" || floor.toLowerCase() === String(room || "").toLowerCase())
+      ? (room || floor)
+      : locPair(floor, room);
+    const way = wayPositionLabel(sw, home);
+    const paren = [place, way].filter(Boolean).join(", ");
+    return paren ? ("Same light as " + name + " (" + paren + ")") : ("Same light as " + name);
+  }
+  function matchingLoggedLights(home, d) {
+    if (!home || d.loggedDumb) return [];
+    const q = loadQueryText(d);
+    if (!q && !d.load) return [];
+    return uniqueLightsRecentFirst(home, d.editId).filter((s) => {
+      if (!state.loadTyping && d.load) return sameLoad(s, d);
+      if (lightMatchesQuery(s, home, q)) return true;
+      if (q && s.load && s.load.toLowerCase().indexOf(q.toLowerCase()) !== -1) return true;
+      return false;
+    });
+  }
+  function sameLightSuggestHtml(home, d) {
+    const lights = matchingLoggedLights(home, d);
+    if (!lights.length) return "";
+    let html = `<p class="suggest-label">Same light as…</p>`;
+    lights.forEach((s) => {
+      const label = sameLightSuggestLabel(s, home);
+      const on = samePickedLight(home, d, s);
+      html += `<button type="button" class="same-light-chip" data-pick-light="${s.id}" data-label="${esc(label)}" data-load="${esc(s.load || "")}" aria-pressed="${on ? "true" : "false"}">${esc(label)}</button>`;
+    });
+    return html;
+  }
+  function cannedLoadHtml(home, d) {
+    const raw = loadQueryText(d);
+    const qLow = raw.toLowerCase();
+    const filter = state.loadTyping || !(d.load);
     let html = "";
     LOADS.forEach((l) => {
       if (l === "Other") return;
-      if (!loadMatchesQuery(l, qLow)) return;
+      if (filter && !loadMatchesQuery(l, qLow)) return;
       html += `<button type="button" class="suggest-item" data-pick-load="${esc(l)}" aria-pressed="${d.load===l && !d.pickedLightId ? "true" : "false"}">${esc(l)}</button>`;
     });
     const exact = LOADS.some((l) => l.toLowerCase() === qLow);
-    if (qLow && !exact) {
-      html += `<button type="button" class="suggest-item" data-pick-load="Other" data-other="${esc(raw.trim())}">Use “${esc(raw.trim())}” as a new light</button>`;
-    }
-    if (!d.loggedDumb) {
-      const lights = uniqueLightsRecentFirst(home, d.editId).filter((s) => lightMatchesQuery(s, home, raw));
-      if (lights.length) {
-        html += `<p class="suggest-label">Same light as…</p>`;
-        lights.forEach((s) => {
-          const label = lightChipLabel(s, home);
-          const on = samePickedLight(home, d, s);
-          html += `<button type="button" class="suggest-item" data-pick-light="${s.id}" data-label="${esc(label)}" data-load="${esc(s.load || "")}" aria-pressed="${on ? "true" : "false"}">${esc(label)}${wayKindBadgeHtml(s, home)}</button>`;
-        });
-      }
+    if (qLow && !exact && (state.loadTyping || d.load === "Other")) {
+      html += `<button type="button" class="suggest-item" data-pick-load="Other" data-other="${esc(raw)}">Use “${esc(raw)}” as a new light</button>`;
     }
     return html;
   }
+  function showCannedLoads(d) {
+    return !d.load || !!state.loadFocused || !!state.loadTyping;
+  }
   function loadFieldHtml(home, d) {
     const val = loadDisplayValue(d);
-    const open = !!state.loadFocused;
-    return `<div class="field-wrap" id="loadWrap">${fieldHead("What it controls", "load", "Type a name or pick a light. Tapping a suggested light adds another switch for it, even from another room. A new name stays a new light.")}<input type="text" id="loadQuery" data-field="loadQuery" value="${esc(val)}" placeholder="Can lights, exhaust fan…" autocomplete="off" autocapitalize="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="${open ? "true" : "false"}"><div id="loadSuggest" class="suggest${open ? "" : " hidden"}">${loadSuggestInner(home, d)}</div>${pendingChoiceHtml(home)}</div>`;
+    const open = showCannedLoads(d);
+    const same = sameLightSuggestHtml(home, d);
+    const canned = cannedLoadHtml(home, d);
+    const hint = "Type a name or tap a type. Matching lights already logged in this home show up under the field. Tapping one adds another switch for it, even from another room.";
+    return `<div class="field-wrap" id="loadWrap">${fieldHead("What it controls", "load", hint)}<input type="text" id="loadQuery" data-field="loadQuery" value="${esc(val)}" placeholder="Can lights, exhaust fan…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="${open ? "true" : "false"}" aria-controls="loadSuggest"><div id="sameLightSuggest" class="same-light-suggest">${same}</div><div id="loadSuggest" class="suggest${open ? "" : " hidden"}">${canned}</div>${pendingChoiceHtml(home)}</div>`;
   }
   function applyLoadChoice(name, other) {
     const d = state.draft;
@@ -606,6 +652,7 @@
     state.loadTyping = false;
     state.loadFocused = false;
     persist(); render();
+    revealInView(document.getElementById("sameLightSuggest") || document.getElementById("loadWrap"));
   }
   function commitLoadQuery() {
     const d = state.draft;
@@ -619,19 +666,25 @@
     else applyLoadChoice("Other", raw);
   }
   function refreshLoadSuggest() {
+    const home = homeOf();
+    const d = state.draft;
+    const same = document.getElementById("sameLightSuggest");
     const box = document.getElementById("loadSuggest");
-    if (!box) return;
-    box.innerHTML = loadSuggestInner(homeOf(), state.draft);
-    bindLoadSuggest(box);
+    if (same) same.innerHTML = sameLightSuggestHtml(home, d);
+    if (box) {
+      box.innerHTML = cannedLoadHtml(home, d);
+      box.classList.toggle("hidden", !showCannedLoads(d));
+    }
+    bindLoadSuggest();
   }
   function bindLoadSuggest(box) {
-    const root = box || document.getElementById("loadSuggest");
-    if (!root) return;
-    root.querySelectorAll("[data-pick-load]").forEach((b) => b.addEventListener("mousedown", (e) => {
+    const wrap = document.getElementById("loadWrap") || box;
+    if (!wrap) return;
+    wrap.querySelectorAll("[data-pick-load]").forEach((b) => b.addEventListener("click", (e) => {
       e.preventDefault();
       applyLoadChoice(b.getAttribute("data-pick-load"), b.getAttribute("data-other") || "");
     }));
-    root.querySelectorAll("[data-pick-light]").forEach((b) => b.addEventListener("mousedown", (e) => {
+    wrap.querySelectorAll("[data-pick-light]").forEach((b) => b.addEventListener("click", (e) => {
       e.preventDefault();
       state.loadTyping = false;
       state.loadFocused = false;
@@ -677,12 +730,12 @@
         else {
           state.loadFocused = false;
           const live = document.getElementById("loadSuggest");
-          if (live) { live.classList.add("hidden"); }
-          el.setAttribute("aria-expanded", "false");
+          if (live && state.draft && state.draft.load) live.classList.add("hidden");
+          el.setAttribute("aria-expanded", showCannedLoads(state.draft) ? "true" : "false");
         }
       }, 160);
     });
-    bindLoadSuggest(box);
+    bindLoadSuggest(wrap || box);
   }
   function showFanTypeMain(d, useKind) {
     return !d.loggedDumb && useKind === "fan" && d.load !== "Exhaust fan";
@@ -1817,7 +1870,10 @@
         persist(); render();
       });
     });
-    document.querySelectorAll("[data-pick-light]").forEach((b) => b.addEventListener("click", () => pickExistingLight(b.getAttribute("data-pick-light"))));
+    document.querySelectorAll("[data-pick-light]").forEach((b) => {
+      if (b.closest("#loadWrap")) return;
+      b.addEventListener("click", () => pickExistingLight(b.getAttribute("data-pick-light")));
+    });
     document.getElementById("moreToggle")?.addEventListener("click", () => { state.moreOpen = !state.moreOpen; render(); });
     document.getElementById("fixtureOpen")?.addEventListener("click", () => { state.fixtureOpen = true; render(); });
     document.getElementById("fixtureHide")?.addEventListener("click", () => { state.fixtureOpen = false; render(); });
@@ -1847,7 +1903,7 @@
     document.querySelectorAll("[data-same-light]").forEach((b) => b.addEventListener("click", () => acceptSameLight(b.getAttribute("data-same-light"))));
     document.getElementById("saveSw")?.addEventListener("click", () => saveSwitch(false));
     document.getElementById("logDumb")?.addEventListener("click", () => saveSwitch(true));
-    document.getElementById("clearDraft")?.addEventListener("click", () => { const d = state.draft; state.draft = emptyDraft(d.floor, d.room); state.draft.roomOther = d.roomOther; state.pendingMatch = null; persist(); render(); });
+    document.getElementById("clearDraft")?.addEventListener("click", () => { const d = state.draft; state.draft = emptyDraft(d.floor, d.room); state.draft.roomOther = d.roomOther; state.pendingMatch = null; state.loadTyping = false; state.loadFocused = false; persist(); render(); });
     document.getElementById("deleteSw")?.addEventListener("click", deleteSwitch);
     document.getElementById("linkYes")?.addEventListener("click", linkPending);
     document.getElementById("linkNo")?.addEventListener("click", rejectPending);
@@ -2097,11 +2153,19 @@
   }
   function resetDraftKeepRoom() {
     const d = state.draft;
-    state.draft = emptyDraft(d.floor, d.room);
-    state.draft.roomOther = d.roomOther;
+    const advance = !d.editId && Number(d.gangSize) > 1 && Number(d.gangPosition) < Number(d.gangSize);
+    const next = emptyDraft(d.floor, d.room);
+    next.roomOther = d.roomOther;
+    if (advance) {
+      next.gangSize = Number(d.gangSize);
+      next.gangPosition = Number(d.gangPosition) + 1;
+    }
+    state.draft = next;
     state.pendingMatch = null;
     state.moreOpen = false;
     state.fixtureOpen = false;
+    state.loadTyping = false;
+    state.loadFocused = false;
     persist(); render();
   }
   function editSwitch(id) {

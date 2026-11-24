@@ -169,3 +169,12 @@ The **Same light / New light** prompt now appears as a highlighted card directly
 
 Summary now leads with an **Install list** for the electrician, grouped by floor and room in walk order. Each box shows the gang count; each slot shows what it controls, the device to install (brand part when a brand is picked, otherwise a generic type), the multi-way position and other ends (for example `3-way 1/2, other end: Hall`), Main vs Companion when the brand needs a designated main, and dimmable / fan / verify-on-site notes. The parts/order sheet is behind **Show parts to order**. Print / Save PDF, export install CSV, and Share are on the install list. The layout is stacked for a 393px phone and has a print stylesheet.
 
+
+
+## 2026-11-24 — Visible Same light chips after Save or a type chip
+
+Andrew on a real iPhone (2026-11-24e) reported that he only saw canned load types (Can lights, Pendants, and so on) and no drop-down of already-logged lights.
+
+Cause: “Same light as…” lived in the same scrollable suggestion list as the canned types, *below* all 14 type chips, inside a 220px-tall box — easy to miss on a phone. Tapping a canned chip also closed that list (`loadFocused = false`), so matches for that type never appeared. Suggestions required the text field to be focused. If the previous switch was still on the form (or he was looking only at the type chips), the logged-light matches stayed hidden.
+
+Fix (version `2026-11-24f`): after **Save**, the form auto-resets for the next switch — floor and room stay, load / type / notes clear, and the slot advances when the box has more gangs. **Clear for next** remains as a manual reset (including gang/slot back to 1). Canned type chips stay visible under the field after a save, so they can be tapped with no extra focus. Tapping a type chip or typing immediately shows matching lights already logged in this home as visible chips under the field, labeled like `Same light as Can lights (Kitchen, 3-way 1/2)`. If none match, that row stays empty. This is a chip row, not a hidden `<datalist>`.
