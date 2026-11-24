@@ -1,6 +1,7 @@
 import asyncio, json, os, sys
 from pathlib import Path
 from playwright.async_api import async_playwright
+from verify_helpers import choose_load, pick_existing_light, open_more, set_other_spots, show_parts
 
 BASE = os.environ.get("SS_BASE", "http://127.0.0.1:8771/index.html")
 OUT = Path(os.environ.get("SS_OUT", "/workspace/switch-survey/verify/neutrals-autolink"))
@@ -23,6 +24,7 @@ def parse_qty(rows):
     return {r[0]: int(r[1]) for r in rows if len(r) >= 2 and str(r[1]).isdigit()}
 
 async def qty_on(page):
+    await show_parts(page)
     rows = await page.eval_on_selector_all("table tbody tr", "els => els.map(tr => [...tr.children].map(td => td.innerText.trim()))")
     return parse_qty(rows)
 
@@ -36,14 +38,8 @@ async def goto_walk_new_home(page, name):
 
 async def pick_room_load(page, room, load):
     await page.select_option("select[data-field='room']", room)
-    await page.select_option("select[data-field='load']", load)
+    await choose_load(page, load)
     await page.wait_for_timeout(80)
-
-async def open_more(page):
-    more = page.locator("#more")
-    if await more.count() and "hidden" in ((await more.get_attribute("class")) or "").split():
-        await page.click("#moreToggle")
-        await page.wait_for_timeout(80)
 
 async def open_hint(page, hint_id):
     btn = page.locator(f'[data-toggle-hint="{hint_id}"]')
@@ -55,24 +51,6 @@ async def open_fixture(page):
     if await page.locator("#fixtureOpen").count():
         await page.click("#fixtureOpen")
         await page.wait_for_timeout(60)
-
-
-async def pick_existing_light(page, contains):
-    await page.wait_for_selector("[data-pick-light]")
-    chips = page.locator("[data-pick-light]")
-    n = await chips.count()
-    needle = contains.lower()
-    labels = []
-    for i in range(n):
-        chip = chips.nth(i)
-        label = ((await chip.get_attribute("data-label")) or (await chip.inner_text()) or "").strip()
-        labels.append(label)
-        if await chip.is_visible() and needle in label.lower():
-            await chip.click()
-            await page.wait_for_timeout(80)
-            return label
-    raise AssertionError(f"no visible light chip containing {contains!r}; chips={labels}")
-
 
 
 async def run():
@@ -93,20 +71,21 @@ async def run():
         await open_hint(page, "addSwitch")
         body = await page.inner_text("body")
         check("survey intro is survey-every-switch", "Survey every switch in order" in body)
-        check("Also controlled from not on main walk", "Also controlled from" not in body)
+        check("Also controlled from not on the form", "Also controlled from" not in body)
         check("Where the switch is", "Where the switch is" in body)
         check("Switch type on main form", "Switch type" in body and "Dimmer" in body)
+        check("gang count is on the main form", "Switches in this box" in body)
         check("light question off main walk", "Is the light in this room?" not in body and "Light is in a different room" not in body and "Where is the light?" not in body)
         await shot(page, "393-dark-walk-top.png")
 
         await page.click("#moreToggle")
         await page.wait_for_timeout(80)
         body = await page.inner_text("body")
-        check("Also controlled from under More", "Also controlled from" in body)
+        check("Also controlled from removed from More", "Also controlled from" not in body and "Doorway or wall" not in body)
+        check("note is under More", "Note, optional" in body)
         check("no Light is in a different room under More", "Light is in a different room" not in body and "Where is the light?" not in body)
         await page.click("#moreToggle")
         await page.wait_for_timeout(80)
-        check("Also controlled from hidden after collapse", "Also controlled from" not in (await page.inner_text("body")))
 
         # Example totals + AC/DC fan path still 23/6/1/5, no unknown nag
         await page.click("[data-tab='homes']")
@@ -281,6 +260,7 @@ async def run():
         await page.click("[data-tab='summary']")
         await page.wait_for_timeout(150)
         async with page.expect_download() as dl:
+            await show_parts(page)
             await page.click("#exportCsv")
         csvp = OUT / "auto-4way.csv"
         await (await dl.value).save_as(str(csvp))

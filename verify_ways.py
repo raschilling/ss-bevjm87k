@@ -1,6 +1,7 @@
 import asyncio, json, os, sys
 from pathlib import Path
 from playwright.async_api import async_playwright
+from verify_helpers import choose_load, pick_existing_light, open_more, set_other_spots, show_parts
 
 BASE = os.environ.get("SS_BASE", "http://127.0.0.1:8768/index.html")
 OUT = Path(os.environ.get("SS_OUT", "/workspace/switch-survey/verify/ways"))
@@ -23,6 +24,7 @@ def parse_qty(rows):
     return {r[0]: int(r[1]) for r in rows if len(r) >= 2 and str(r[1]).isdigit()}
 
 async def qty_on(page):
+    await show_parts(page)
     rows = await page.eval_on_selector_all("table tbody tr", "els => els.map(tr => [...tr.children].map(td => td.innerText.trim()))")
     return parse_qty(rows)
 
@@ -36,31 +38,8 @@ async def goto_walk_new_home(page, name):
 
 async def pick_room_load(page, room, load):
     await page.select_option("select[data-field='room']", room)
-    await page.select_option("select[data-field='load']", load)
+    await choose_load(page, load)
     await page.wait_for_timeout(80)
-
-async def open_more(page):
-    if await page.locator("#more.hidden").count():
-        await page.click("#moreToggle")
-        await page.wait_for_timeout(80)
-
-
-async def pick_existing_light(page, contains):
-    await page.wait_for_selector("[data-pick-light]")
-    chips = page.locator("[data-pick-light]")
-    n = await chips.count()
-    needle = contains.lower()
-    labels = []
-    for i in range(n):
-        chip = chips.nth(i)
-        label = ((await chip.get_attribute("data-label")) or (await chip.inner_text()) or "").strip()
-        labels.append(label)
-        if await chip.is_visible() and needle in label.lower():
-            await chip.click()
-            await page.wait_for_timeout(80)
-            return label
-    raise AssertionError(f"no visible light chip containing {contains!r}; chips={labels}")
-
 
 async def run():
     async with async_playwright() as p:
@@ -77,9 +56,9 @@ async def run():
         await page.wait_for_selector("[data-tab='walk']")
         body = await page.inner_text("body")
         check("Which one? is not on the form", "Which one?" not in body)
-        await open_more(page)
-        body = await page.inner_text("body")
-        check("Also controlled from chips", "Also controlled from" in body and "1 other spot (3-way)" in body and "2 other spots (4-way)" in body)
+        check("Lights already logged box is gone", "Lights already logged" not in body)
+        check("gang count is on the main form", "Switches in this box" in body)
+        check("Also controlled from and doorway are gone", "Also controlled from" not in body and "Doorway or wall" not in body)
         await shot(page, "393-dark-walk-labels.png")
 
         # Example totals still include 5 companions from linked-only stairs/etc.
@@ -88,6 +67,10 @@ async def run():
         await page.wait_for_timeout(200)
         await page.click("[data-tab='summary']")
         await page.wait_for_timeout(200)
+        body = await page.inner_text("body")
+        check("install list is the default summary view", "Install list" in body and "Print / Save PDF" in body and "Show parts to order" in body)
+        check("install list shows boxes and other ends", "-gang box" in body and "3-way 1/2" in body and "other end" in body.lower())
+        await shot(page, "393-dark-install-list.png")
         q = await qty_on(page)
         check("example 23/6/1/5", q.get("Smart dimmer")==23 and q.get("Smart on/off")==6 and q.get("Smart fan")==1 and q.get("Companion")==5, q)
         body = await page.inner_text("body")
@@ -119,10 +102,11 @@ async def run():
         # Declared-only
         await goto_walk_new_home(page, "Declared only")
         await pick_room_load(page, "Kitchen", "Can lights")
-        await open_more(page)
-        await page.click('[data-field="otherSpots"] .chip[data-value="1 other spot (3-way)"]')
         await page.click("#saveSw")
         await page.wait_for_timeout(200)
+        await set_other_spots(page, 1)
+        await page.click("[data-tab='walk']")
+        await page.wait_for_timeout(150)
         body = await page.inner_text("body")
         check("declared-only walk badge", "3-way 1/2" in body and "3-way (2 locations)" not in body)
         await page.click("[data-tab='summary']")
@@ -133,6 +117,7 @@ async def run():
         check("declared-only summary badge", "3-way (2 locations)" in body)
         await shot(page, "393-dark-declared-only.png")
         async with page.expect_download() as dl:
+            await show_parts(page)
             await page.click("#exportCsv")
         csvp = OUT / "declared-only.csv"
         await (await dl.value).save_as(str(csvp))
@@ -162,9 +147,11 @@ async def run():
         # Both: declare 1 other, then link the second — still 1 companion
         await goto_walk_new_home(page, "Both declare and link")
         await pick_room_load(page, "Kitchen", "Can lights")
-        await open_more(page)
-        await page.click('[data-field="otherSpots"] .chip[data-value="1 other spot (3-way)"]')
         await page.click("#saveSw")
+        await page.wait_for_timeout(200)
+        await set_other_spots(page, 1)
+        await page.click("[data-tab='walk']")
+        await page.wait_for_timeout(100)
         await page.wait_for_timeout(200)
         await pick_room_load(page, "Hall", "Can lights")
         await pick_existing_light(page, "Kitchen cans")
@@ -236,9 +223,11 @@ async def run():
         # Declared 4-way only
         await goto_walk_new_home(page, "Declared four way")
         await pick_room_load(page, "Kitchen", "Can lights")
-        await open_more(page)
-        await page.click('[data-field="otherSpots"] .chip[data-value="2 other spots (4-way)"]')
         await page.click("#saveSw")
+        await page.wait_for_timeout(200)
+        await set_other_spots(page, 2)
+        await page.click("[data-tab='walk']")
+        await page.wait_for_timeout(100)
         await page.wait_for_timeout(200)
         await page.click("[data-tab='summary']")
         await page.wait_for_timeout(200)

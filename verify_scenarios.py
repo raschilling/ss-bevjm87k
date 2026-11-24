@@ -2,6 +2,7 @@
 import asyncio, json, os, re, sys
 from pathlib import Path
 from playwright.async_api import async_playwright
+from verify_helpers import choose_load, pick_existing_light, open_more, set_other_spots, show_parts
 
 BASE = os.environ.get("SS_BASE", "http://127.0.0.1:8773/index.html")
 OUT = Path(os.environ.get("SS_OUT", "/workspace/switch-survey/verify/scenarios"))
@@ -29,6 +30,7 @@ def parse_qty(rows):
     return {r[0]: int(r[1]) for r in rows if len(r) >= 2 and str(r[1]).isdigit()}
 
 async def qty_on(page):
+    await show_parts(page)
     rows = await page.eval_on_selector_all("table tbody tr", "els => els.map(tr => [...tr.children].map(td => td.innerText.trim()))")
     return parse_qty(rows)
 
@@ -49,31 +51,8 @@ async def pick_room_load(page, room, load, floor=None):
     if floor:
         await set_floor(page, floor)
     await page.select_option("select[data-field='room']", room)
-    await page.select_option("select[data-field='load']", load)
+    await choose_load(page, load)
     await page.wait_for_timeout(80)
-
-async def open_more(page):
-    more = page.locator("#more")
-    if await more.count() and "hidden" in ((await more.get_attribute("class")) or "").split():
-        await page.click("#moreToggle")
-        await page.wait_for_timeout(80)
-
-async def pick_existing_light(page, contains):
-    await page.wait_for_selector("[data-pick-light]")
-    chips = page.locator("[data-pick-light]")
-    n = await chips.count()
-    needle = contains.lower()
-    labels = []
-    for i in range(n):
-        chip = chips.nth(i)
-        label = ((await chip.get_attribute("data-label")) or (await chip.inner_text()) or "").strip()
-        labels.append(label)
-        if await chip.is_visible() and needle in label.lower():
-            await chip.click()
-            await page.wait_for_timeout(80)
-            return label
-    raise AssertionError(f"no visible light chip containing {contains!r}; chips={labels}")
-
 
 async def set_fan(page, label):
     await page.click(f'[data-field="fanType"] .chip[data-value="{label}"]')
@@ -105,7 +84,6 @@ async def set_fixture(page, n):
     await page.wait_for_timeout(80)
 
 async def set_gang(page, size, pos=1):
-    await open_more(page)
     await page.click(f'[data-field="gangSize"] .chip[data-value="{size}"]')
     await page.wait_for_timeout(80)
     if int(size) > 1:
@@ -232,13 +210,17 @@ async def run():
               and "Change PIN" not in body and "Open your saved survey" not in body)
         check("first launch is the survey form", "Add a switch" in body and "Save switch" in body)
         check("Keep as is (not smart) is on the form", "Keep as is (not smart)" in body and "Regular switch" not in body)
+        check("gang is on the first-launch form", "Switches in this box" in body)
+        check("Also controlled from is gone", "Also controlled from" not in body and "Doorway or wall" not in body and "Lights already logged" not in body)
+        save_box = await page.locator("#saveSw").bounding_box()
+        check("Save fits on 393x852 with gang visible", bool(save_box) and save_box["y"] + save_box["height"] <= 852, save_box)
         await shot(page, "393-dark-first-launch.png")
         check("Survey tab label", (await page.locator('[data-tab="walk"]').inner_text()).strip() == "Survey")
         check("no yes/no light question on main survey", "Is the light in this room?" not in body and "Light is in a different room" not in body and "Where is the light?" not in body)
         await open_hint(page, "addSwitch")
         body = await page.inner_text("body")
         check("intro is Survey every switch in order", "Survey every switch in order" in body)
-        check("intro mentions tap a logged light name", "tap its name in the list of lights already logged" in body)
+        check("intro mentions typing a logged light", "start typing under What it controls" in body or "What it controls" in body)
         check("Which one? is not on the form", "Which one?" not in body and await page.locator('[data-field="qualifier"]').count() == 0)
         check("Switch type has Not sure if dimmable", "Not sure if dimmable" in body)
         check("fixture count is not on the main form", await page.locator("#fixtureOpen").count() == 0 and "Fixtures on this switch" not in body)
@@ -310,7 +292,11 @@ async def run():
         await pick_room_load(page, "Hall", "Can lights", floor="Upper")
         await save(page)
         await pick_room_load(page, "Stairs", "Can lights", floor="Main")
-        check("S2 shows Upper Hall cans chip", "Upper Hall cans" in (await page.inner_text("body")))
+        await page.locator("#loadQuery").click()
+        await page.wait_for_timeout(80)
+        check("S2 shows Upper Hall cans suggestion", "Upper Hall cans" in (await page.inner_text("body")))
+        await page.locator("h1").click()
+        await page.wait_for_timeout(80)
         await pick_existing_light(page, "Upper Hall cans")
         await save(page)
         check("S2 auto-linked via chip, no Same/New", not await has_same_or_new(page))
@@ -328,6 +314,22 @@ async def run():
         await pick_room_load(page, "Kitchen", "Can lights")
         await save(page)
         check("S3 prompts Same light vs New light", await has_same_or_new(page) and "New light" in (await page.inner_text("body")) and "Same light as" in (await page.inner_text("body")))
+        same_in_load = await page.locator("#loadWrap #sameOrNew").count()
+        check("S3 Same/New prompt is inline under What it controls", same_in_load == 1)
+        prompt_box = await page.locator("#sameOrNew").bounding_box()
+        check("S3 Same/New prompt is in the 393 viewport", bool(prompt_box) and prompt_box["y"] >= 0 and prompt_box["y"] < 852, prompt_box)
+        y_before = await page.evaluate("() => window.scrollY")
+        await save(page)
+        y_after = await page.evaluate("() => window.scrollY")
+        check("S3 ignoring the prompt blocks save", await has_same_or_new(page))
+        check("S3 save-blocked does not jump to the top", y_after <= y_before + 20 or await page.locator("#sameOrNew").bounding_box() is not None, {"before": y_before, "after": y_after})
+        await page.set_viewport_size({"width": 393, "height": 500})
+        await page.wait_for_timeout(400)
+        pb = await page.locator("#sameOrNew").bounding_box()
+        check("S3 prompt stays in a short keyboard viewport", bool(pb) and pb["y"] >= 0 and pb["y"] + min(pb["height"], 80) <= 500, pb)
+        await page.set_viewport_size({"width": 393, "height": 852})
+        await page.wait_for_timeout(80)
+        await shot(page, "393-dark-same-new-prompt.png")
         await click_same_light(page, "Kitchen")
         await assert_order(page, "S3 same-room 3-way", {
             "dimmer": 1, "onoff": 0, "fan": 0, "companion": 1, "dumb": 0,
@@ -339,7 +341,11 @@ async def run():
         await pick_room_load(page, "Hall", "Can lights")
         await save(page)
         await pick_room_load(page, "Foyer", "Can lights")
-        check("S4 shows Main Hall cans chip", "Main Hall cans" in (await page.inner_text("body")))
+        await page.locator("#loadQuery").click()
+        await page.wait_for_timeout(80)
+        check("S4 shows Main Hall cans suggestion", "Main Hall cans" in (await page.inner_text("body")))
+        await page.locator("h1").click()
+        await page.wait_for_timeout(80)
         await pick_existing_light(page, "Main Hall cans")
         await save(page)
         await pick_room_load(page, "Living room", "Can lights")
@@ -355,6 +361,20 @@ async def run():
         body = await page.inner_text("body")
         check("S4 walk position badges", "4-way 1/3" in body and "4-way 2/3" in body and "4-way 3/3" in body)
         check("S4 walk has no N locations badge", "4-way (3 locations)" not in body)
+
+        await page.click("[data-tab='summary']")
+        await page.wait_for_timeout(150)
+        body = await page.inner_text("body")
+        check("S4 install list is the default summary", "Install list" in body and "Print / Save PDF" in body and ("Show parts to order" in body or "Hide parts to order" in body))
+        check("S4 install list has 4-way other ends", "4-way 1/3" in body and "other end" in body.lower() and "-gang box" in body)
+        await shot(page, "393-dark-install-list.png")
+        await page.emulate_media(color_scheme="light")
+        await page.wait_for_timeout(80)
+        await shot(page, "393-light-install-list.png")
+        await page.emulate_media(color_scheme="dark")
+        await page.wait_for_timeout(80)
+        await page.click("[data-tab='walk']")
+        await page.wait_for_timeout(80)
 
         # 5. Kitchen 3 can groups: first cans (3-way), sink (3-way), #2 (single).
         # Tags come only from the Same light / New light prompt, not a form field.
@@ -391,7 +411,7 @@ async def run():
         await pick_room_load(page, "Kitchen", "Can lights")
         body = await page.inner_text("body")
         check("S5 walk form shows tagged light chips", "sink cans" in body.lower() and "#2 cans" in body.lower())
-        check("filter box on walk form", await page.locator('input[data-field="lightFilter"]').count() > 0)
+        check("What it controls is a single input", await page.locator("#loadQuery").count() > 0 and await page.locator('input[data-field="lightFilter"]').count() == 0 and "Lights already logged" not in (await page.inner_text("body")))
         await shot(page, "393-dark-walk-form.png")
 
         # 6. Kitchen cans vs Hall cans must not merge
@@ -417,12 +437,18 @@ async def run():
         await pick_room_load(page, "Primary bedroom", "Ceiling fan")
         await set_fan(page, "Not sure")
         await save(page)
-        ok, actual, body = await assert_order(page, "S7 AC / DC / Not sure fans", {
-            "dimmer": 0, "onoff": 1, "fan": 1, "companion": 0, "dumb": 0,
-            "plates": {1: 3}, "locations": 3, "verify": 1
+        await pick_room_load(page, "Guest bath", "Exhaust fan")
+        body = await page.inner_text("body")
+        check("S7 exhaust has no fan type question", "Fan type" not in body)
+        check("S7 exhaust preview is on/off", "On/off" in body or "on/off" in body.lower())
+        await save(page)
+        ok, actual, body = await assert_order(page, "S7 AC / DC / Not sure fans plus exhaust", {
+            "dimmer": 0, "onoff": 2, "fan": 1, "companion": 0, "dumb": 0,
+            "plates": {1: 4}, "locations": 4, "verify": 1
         })
         check("S7 DC constant-power note", "DC" in body and "constant power" in body.lower())
         check("S7 verify-on-site names the unsure fan", "Verify on site" in body and "Primary bedroom" in body)
+        check("S7 exhaust is an on/off, not a fan switch", (actual or {}).get("onoff") == 2 and (actual or {}).get("fan") == 1, actual)
 
         # 8. Keep as is (not smart) + optional fixture count 6 and 8+
         await goto_walk_new_home(page, "S8 Regular and fixture counts")
@@ -554,6 +580,7 @@ async def run():
             "plates": {1: 3}, "locations": 3, "verify": 0
         })
         async with page.expect_download() as dl:
+            await show_parts(page)
             await page.click("#exportCsv")
         csvp = OUT / "s12-home-b.csv"
         await (await dl.value).save_as(str(csvp))
@@ -620,6 +647,7 @@ async def run():
         check("S13 exact note still present under Caseta", UNSURE_DIMMABLE_NOTE in body)
         await shot(page, "393-dark-summary-unsure.png")
         async with page.expect_download() as dl:
+            await show_parts(page)
             await page.click("#exportCsv")
         csvp = OUT / "s13-not-sure-dimmable.csv"
         await (await dl.value).save_as(str(csvp))

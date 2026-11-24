@@ -1,6 +1,7 @@
 import asyncio, json, os, sys
 from pathlib import Path
 from playwright.async_api import async_playwright
+from verify_helpers import choose_load, pick_existing_light, open_more, set_other_spots, show_parts
 
 BASE = os.environ.get("SS_BASE", "http://127.0.0.1:8770/index.html")
 OUT = Path(os.environ.get("SS_OUT", "/workspace/switch-survey/verify/fixture-light"))
@@ -23,6 +24,7 @@ def parse_qty(rows):
     return {r[0]: int(r[1]) for r in rows if len(r) >= 2 and str(r[1]).isdigit()}
 
 async def qty_on(page):
+    await show_parts(page)
     rows = await page.eval_on_selector_all("table tbody tr", "els => els.map(tr => [...tr.children].map(td => td.innerText.trim()))")
     return parse_qty(rows)
 
@@ -36,14 +38,8 @@ async def goto_walk_new_home(page, name):
 
 async def pick_room_load(page, room, load):
     await page.select_option("select[data-field='room']", room)
-    await page.select_option("select[data-field='load']", load)
+    await choose_load(page, load)
     await page.wait_for_timeout(80)
-
-async def open_more(page):
-    more = page.locator("#more")
-    if await more.count() and "hidden" in ((await more.get_attribute("class")) or "").split():
-        await page.click("#moreToggle")
-        await page.wait_for_timeout(80)
 
 async def open_hint(page, hint_id):
     btn = page.locator(f'[data-toggle-hint="{hint_id}"]')
@@ -55,24 +51,6 @@ async def open_fixture(page):
     if await page.locator("#fixtureOpen").count():
         await page.click("#fixtureOpen")
         await page.wait_for_timeout(60)
-
-
-async def pick_existing_light(page, contains):
-    await page.wait_for_selector("[data-pick-light]")
-    chips = page.locator("[data-pick-light]")
-    n = await chips.count()
-    needle = contains.lower()
-    labels = []
-    for i in range(n):
-        chip = chips.nth(i)
-        label = ((await chip.get_attribute("data-label")) or (await chip.inner_text()) or "").strip()
-        labels.append(label)
-        if await chip.is_visible() and needle in label.lower():
-            await chip.click()
-            await page.wait_for_timeout(80)
-            return label
-    raise AssertionError(f"no visible light chip containing {contains!r}; chips={labels}")
-
 
 
 async def run():
@@ -131,6 +109,7 @@ async def run():
         check("fixture home 1 dimmer", q.get("Smart dimmer")==1 and "Companion" not in q, q)
         await shot(page, "393-dark-fixture-summary.png")
         async with page.expect_download() as dl:
+            await show_parts(page)
             await page.click("#exportCsv")
         csvp = OUT / "fixture-hall.csv"
         await (await dl.value).save_as(str(csvp))
@@ -167,6 +146,8 @@ async def run():
         await page.click("#saveSw")
         await page.wait_for_timeout(200)
         await pick_room_load(page, "Stairs", "Can lights")
+        await page.locator("#loadQuery").click()
+        await page.wait_for_timeout(80)
         check("Kitchen cans chip on Stairs form", "Main Kitchen cans" in (await page.inner_text("body")))
         await pick_existing_light(page, "Main Kitchen cans")
         body = await page.inner_text("body")
@@ -185,6 +166,7 @@ async def run():
         check("summary shows switch vs light", "Switch:" in body and "Light:" in body and "Stairs" in body and "Kitchen" in body, body)
         await shot(page, "393-dark-cross-room-summary.png")
         async with page.expect_download() as dl:
+            await show_parts(page)
             await page.click("#exportCsv")
         csvp = OUT / "light-elsewhere.csv"
         await (await dl.value).save_as(str(csvp))
