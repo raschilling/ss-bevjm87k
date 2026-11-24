@@ -154,3 +154,18 @@ To force a stale desktop or home-screen copy to update: a `ss-version` meta plus
 
 Survey order no longer shows a shared **3-way (2 locations)** or **4-way (3 locations)** badge on every switch in a group. Each switch gets its own place in walk order, for example **3-way 1/2** and **3-way 2/2**, or **4-way 1/3**, **4-way 2/3**, **4-way 3/3**. A single switch has no badge. The labels recompute when you unlink, merge, or delete, including a declared-only 3-way or 4-way that has not logged the other ends yet (shown as **3-way 1/2** or **4-way 1/3**). Summary still uses the group-level “N locations” badge.
 
+
+## 2026-11-24 — Inline Same/New, light suggestions, install list, and form cleanup
+
+The **Same light / New light** prompt now appears as a highlighted card directly under **What it controls**, not at the top of the page (where it was easy to miss on a phone, especially with the keyboard open). After it appears, the page does not jump to the top. The prompt is scrolled into the visual viewport (`scrollIntoView` with `nearest`, then `center` if needed) after the keyboard settles. If you tap **Save** without choosing, save is blocked and the prompt stays in view — it does not guess. Native confirms (delete) and the migrate keypad were already on-screen dialogs; the flash banner is sticky and is also scrolled into view. Chip rows and Summary merge controls stay inline in the form.
+
+**Lights already logged** (the extra heading, filter box, and always-on chip list) is gone. There is one **What it controls** input. When it is focused and there are matches, a short **Same light as…** list appears under it (with a 3-way/4-way badge when the light is already multi-way). Tapping a suggestion links that light. Typing a new name creates a new light.
+
+**3-way 1/2** badges now show on the Survey order list, on Summary group rows, and on the Same light suggestions. Likely reason they seemed missing on Andrew’s phone: they previously appeared only on Survey order, below the form — not on the form’s logged-light chips or on Summary (which used “1 of 2”). A still-open tab could also have been on the previous build; this version is `2026-11-24e` so a stale `2026-11-24d` copy will reload. Old surveys with `groupId`, or older `otherSpots` / `switchType` values, still compute a position. **Unlink** is a compact text link (32px minimum tap target) so it no longer crowds the list.
+
+**Exhaust fan** (any room) skips the AC/DC question and orders an **on/off** switch, not a fan speed switch or dimmer. Ceiling fan and Fan + light still ask. If an older exhaust entry already has a fan-type override, that control stays under **More** only.
+
+**Switches in this box** and **Which slot** are always on the main form, under Switch type. **Also controlled from** and **Doorway or wall** (and custom spot) are removed from the UI; old values still appear in export, notes, and the order/install math. **More** remains for the optional note (and that rare exhaust override).
+
+Summary now leads with an **Install list** for the electrician, grouped by floor and room in walk order. Each box shows the gang count; each slot shows what it controls, the device to install (brand part when a brand is picked, otherwise a generic type), the multi-way position and other ends (for example `3-way 1/2, other end: Hall`), Main vs Companion when the brand needs a designated main, and dimmable / fan / verify-on-site notes. The parts/order sheet is behind **Show parts to order**. Print / Save PDF, export install CSV, and Share are on the install list. The layout is stacked for a 393px phone and has a print stylesheet.
+

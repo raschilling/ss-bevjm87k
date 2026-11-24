@@ -13,7 +13,7 @@
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
   <meta name="robots" content="noindex, nofollow, noarchive">
   <meta name="description" content="Private switch survey.">
-  <meta name="ss-version" content="2026-11-24d">
+  <meta name="ss-version" content="2026-11-24e">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -84,7 +84,7 @@
     .tabs { display: flex; gap: 6px; margin: 0 0 8px; }
     .tabs .btn { flex: 1; }
     .tabs .btn[aria-current="page"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-    .banner { border-radius: 12px; padding: 8px 10px; margin: 0 0 8px; }
+    .banner { border-radius: 12px; padding: 8px 10px; margin: 0 0 8px; position: sticky; top: 0; z-index: 20; }
     .banner.warn { background: var(--warn-bg); color: var(--warn); }
     .banner.ok { background: var(--ok-bg); color: var(--ok); }
     .banner.danger { background: var(--danger-bg); color: var(--danger); }
@@ -123,11 +123,68 @@
       .home-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
       .card { padding: 16px; }
     }
+
+    .banner { position: sticky; top: 0; z-index: 20; }
+    .suggest {
+      margin-top: 6px; border: 1.5px solid var(--line); border-radius: 12px;
+      background: var(--paper); max-height: 220px; overflow-y: auto;
+    }
+    .suggest-label {
+      font-size: .8rem; font-weight: 700; color: var(--muted);
+      margin: 0; padding: 8px 10px 4px;
+    }
+    .suggest-item {
+      appearance: none; display: block; width: 100%; text-align: left;
+      border: 0; border-top: 1px solid var(--line); background: transparent;
+      color: var(--ink); padding: 10px 12px; min-height: 40px; font: inherit; cursor: pointer;
+    }
+    .suggest-item:first-child, .suggest-label + .suggest-item { border-top: 0; }
+    .suggest-item[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 16%, var(--paper)); }
+    .prompt-card { margin: 8px 0 10px; }
+    .btn-unlink {
+      appearance: none; flex: 0 0 auto; align-self: center;
+      min-width: 32px; min-height: 32px; padding: 6px 8px; margin: 0;
+      border: 0; background: transparent; color: var(--muted);
+      font: 650 0.8rem/1 inherit; text-decoration: underline; text-underline-offset: 2px;
+      cursor: pointer; border-radius: 8px;
+    }
+    .logged-row { gap: 4px; }
+    @media (max-width: 400px) {
+      .field-wrap { margin: 0 0 6px; }
+      .chip { min-height: 38px; }
+    }
     .badge-way {
       display: inline-block; font-size: .75rem; font-weight: 700; letter-spacing: .01em;
       padding: 2px 8px; border-radius: 999px; margin-left: 6px; vertical-align: middle;
       white-space: nowrap; background: color-mix(in srgb, var(--accent) 18%, var(--paper));
       color: var(--accent); border: 1px solid var(--accent);
+    }
+
+    .install-list { display: flex; flex-direction: column; gap: 14px; }
+    .install-floor > h2 { margin: 0 0 6px; font-size: 1.05rem; }
+    .install-room { margin: 0 0 12px; }
+    .install-room > h3 { margin: 0 0 6px; font-size: .95rem; }
+    .install-box {
+      border: 1.5px solid var(--line); border-radius: 12px; padding: 8px 10px; margin: 0 0 8px;
+      background: var(--bg); break-inside: avoid;
+    }
+    .install-box-title { font-weight: 700; font-size: .88rem; margin: 0 0 6px; }
+    .install-slot { padding: 8px 0; border-top: 1px solid var(--line); }
+    .install-slot:first-of-type { border-top: 0; padding-top: 0; }
+    .install-slot strong { display: block; font-size: .95rem; }
+    .install-slot .sub { display: block; color: var(--muted); font-size: .85rem; margin-top: 2px; }
+    .install-actions { margin: 0 0 10px; }
+    .parts-toggle { appearance: none; border: 0; background: transparent; color: var(--accent); font: 650 0.95rem/1.3 inherit; padding: 8px 0; min-height: 32px; cursor: pointer; text-align: left; }
+    @media print {
+      body { background: #fff !important; color: #000 !important; padding: 12px !important; }
+      .tabs, .no-print, button, .btn, .btn-unlink, .info-btn, .parts-toggle, #more, #moreToggle { display: none !important; }
+      .banner, .topbar .sub { display: none !important; }
+      .card { box-shadow: none; break-inside: avoid; border-color: #bbb; }
+      .install-box { break-inside: avoid; background: #fff; }
+      .install-slot .sub, p, .hint { color: #333 !important; }
+      .summary-grid { display: block; }
+      .order-sheet { display: none !important; }
+      a { color: inherit; text-decoration: none; }
     }
   </style>
 </head>
@@ -138,7 +195,7 @@
 (() => {
   const META_KEY = "switchSurvey.meta.v1";
   const DATA_KEY = "switchSurvey.data.v2";
-  const APP_VERSION = "2026-11-24d";
+  const APP_VERSION = "2026-11-24e";
   const ITERATIONS = 150000;
   const FLOORS = ["Basement","Main","Upper","Exterior"];
   const INDOOR_ROOMS = ["Bedroom","Closet","Dining room","Family room","Foyer","Garage","Guest bath","Half bath","Hall","Kitchen","Laundry","Living room","Office","Primary bath","Primary bedroom","Stairs","Other"];
@@ -158,7 +215,7 @@
   ];
   const state = {
     migrating: false, migrateBuf: "", migrateError: "", migrateForgot: 0, migrateBusy: false,
-    store: null, tab: "walk",
+    store: null, tab: "walk", summaryShowParts: false,
     draft: emptyDraft("Main", ""), pendingMatch: null, moreOpen: false, openHints: {}, fixtureOpen: false, flash: "", storageOk: true, storageNote: ""
   };
 
@@ -487,20 +544,177 @@
     if (sw.fanType) d.fanType = sw.fanType;
     persist(); render();
   }
-  function existingLightsHtml(home, d) {
-    if (d.loggedDumb) return "";
-    const all = uniqueLightsRecentFirst(home, d.editId);
-    if (!all.length) return "";
-    const typed = (d.lightFilter || "").trim();
-    let visible = 0;
-    const chips = all.map((s) => {
-      const label = lightChipLabel(s, home);
-      const on = samePickedLight(home, d, s);
-      const show = typed ? lightMatchesQuery(s, home, typed) : (!d.load || sameLoad(s, d) || lightMatchesQuery(s, home, d.load));
-      if (show) visible++;
-      return `<button type="button" class="chip" data-pick-light="${s.id}" data-label="${esc(label)}" data-load="${esc(s.load || "")}" aria-pressed="${on ? "true" : "false"}" style="${show ? "" : "display:none"}">${esc(label)}</button>`;
-    }).join("");
-    return `<div class="field-wrap" id="loggedLights">${fieldHead("Lights already logged", "loggedLights", "Tap a name to add another switch for that same light, even from a different room. That makes a 3-way or 4-way.")}<input type="text" data-field="lightFilter" value="${esc(d.lightFilter || "")}" placeholder="Type to filter, e.g. kitchen or island" autocomplete="off"><div class="chips" style="margin-top:6px">${chips}</div><p class="hint" id="noLightMatch" style="${visible ? "display:none" : ""}">No matching lights.</p></div>`;
+  function loadDisplayValue(d) {
+    if (state.loadTyping) return d.loadQuery || "";
+    if (d.load === "Other") return d.loadOther || "";
+    return d.load || "";
+  }
+  function loadMatchesQuery(name, q) {
+    if (!q) return true;
+    return String(name || "").toLowerCase().indexOf(q) !== -1;
+  }
+  function loadSuggestInner(home, d) {
+    const raw = state.loadTyping ? (d.loadQuery || "") : loadDisplayValue(d);
+    const qLow = String(raw || "").trim().toLowerCase();
+    let html = "";
+    LOADS.forEach((l) => {
+      if (l === "Other") return;
+      if (!loadMatchesQuery(l, qLow)) return;
+      html += `<button type="button" class="suggest-item" data-pick-load="${esc(l)}" aria-pressed="${d.load===l && !d.pickedLightId ? "true" : "false"}">${esc(l)}</button>`;
+    });
+    const exact = LOADS.some((l) => l.toLowerCase() === qLow);
+    if (qLow && !exact) {
+      html += `<button type="button" class="suggest-item" data-pick-load="Other" data-other="${esc(raw.trim())}">Use “${esc(raw.trim())}” as a new light</button>`;
+    }
+    if (!d.loggedDumb) {
+      const lights = uniqueLightsRecentFirst(home, d.editId).filter((s) => lightMatchesQuery(s, home, raw));
+      if (lights.length) {
+        html += `<p class="suggest-label">Same light as…</p>`;
+        lights.forEach((s) => {
+          const label = lightChipLabel(s, home);
+          const on = samePickedLight(home, d, s);
+          html += `<button type="button" class="suggest-item" data-pick-light="${s.id}" data-label="${esc(label)}" data-load="${esc(s.load || "")}" aria-pressed="${on ? "true" : "false"}">${esc(label)}${wayKindBadgeHtml(s, home)}</button>`;
+        });
+      }
+    }
+    return html;
+  }
+  function loadFieldHtml(home, d) {
+    const val = loadDisplayValue(d);
+    const open = !!state.loadFocused;
+    return `<div class="field-wrap" id="loadWrap">${fieldHead("What it controls", "load", "Type a name or pick a light. Tapping a suggested light adds another switch for it, even from another room. A new name stays a new light.")}<input type="text" id="loadQuery" data-field="loadQuery" value="${esc(val)}" placeholder="Can lights, exhaust fan…" autocomplete="off" autocapitalize="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="${open ? "true" : "false"}"><div id="loadSuggest" class="suggest${open ? "" : " hidden"}">${loadSuggestInner(home, d)}</div>${pendingChoiceHtml(home)}</div>`;
+  }
+  function applyLoadChoice(name, other) {
+    const d = state.draft;
+    d.kindOverride = "";
+    if (name === "Other") {
+      d.load = "Other";
+      d.loadOther = (other || "").trim();
+    } else {
+      d.load = name;
+      d.loadOther = "";
+    }
+    d.loadQuery = (name === "Other") ? (d.loadOther || "") : (name || "");
+    const picked = pickedLightOf(homeOf(), d);
+    if (picked && !sameLoad(picked, d)) {
+      d.pickedLightId = "";
+      d.lightElsewhere = false;
+      d.lightFloor = "";
+      d.lightRoom = "";
+      d.lightRoomOther = "";
+    }
+    state.loadTyping = false;
+    state.loadFocused = false;
+    persist(); render();
+  }
+  function commitLoadQuery() {
+    const d = state.draft;
+    const raw = String((document.getElementById("loadQuery") && document.getElementById("loadQuery").value) || d.loadQuery || "").trim();
+    if (!raw) {
+      if (!d.load) return;
+      return;
+    }
+    const match = LOADS.find((l) => l.toLowerCase() === raw.toLowerCase());
+    if (match) applyLoadChoice(match, "");
+    else applyLoadChoice("Other", raw);
+  }
+  function refreshLoadSuggest() {
+    const box = document.getElementById("loadSuggest");
+    if (!box) return;
+    box.innerHTML = loadSuggestInner(homeOf(), state.draft);
+    bindLoadSuggest(box);
+  }
+  function bindLoadSuggest(box) {
+    const root = box || document.getElementById("loadSuggest");
+    if (!root) return;
+    root.querySelectorAll("[data-pick-load]").forEach((b) => b.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      applyLoadChoice(b.getAttribute("data-pick-load"), b.getAttribute("data-other") || "");
+    }));
+    root.querySelectorAll("[data-pick-light]").forEach((b) => b.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      state.loadTyping = false;
+      state.loadFocused = false;
+      pickExistingLight(b.getAttribute("data-pick-light"));
+    }));
+  }
+  function bindLoadInput() {
+    const el = document.getElementById("loadQuery");
+    if (!el) return;
+    const box = document.getElementById("loadSuggest");
+    const wrap = document.getElementById("loadWrap");
+    const show = () => {
+      state.loadFocused = true;
+      if (box) { box.classList.remove("hidden"); el.setAttribute("aria-expanded", "true"); refreshLoadSuggest(); }
+      revealInView(box || el);
+    };
+    el.addEventListener("focus", () => {
+      state.loadTyping = true;
+      state.draft.loadQuery = el.value;
+      show();
+    });
+    el.addEventListener("input", () => {
+      state.loadTyping = true;
+      state.draft.loadQuery = el.value;
+      if (state.draft.pickedLightId) {
+        state.draft.pickedLightId = "";
+        state.draft.lightElsewhere = false;
+        state.draft.lightFloor = "";
+        state.draft.lightRoom = "";
+        state.draft.lightRoomOther = "";
+      }
+      show();
+    });
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); commitLoadQuery(); }
+    });
+    el.addEventListener("blur", () => {
+      setTimeout(() => {
+        const active = document.activeElement;
+        if (active === el || (wrap && active && wrap.contains(active))) return;
+        if (state.loadFocused && active && (active.id === "loadQuery" || (wrap && wrap.contains(active)))) return;
+        if (state.loadTyping) commitLoadQuery();
+        else {
+          state.loadFocused = false;
+          const live = document.getElementById("loadSuggest");
+          if (live) { live.classList.add("hidden"); }
+          el.setAttribute("aria-expanded", "false");
+        }
+      }, 160);
+    });
+    bindLoadSuggest(box);
+  }
+  function showFanTypeMain(d, useKind) {
+    return !d.loggedDumb && useKind === "fan" && d.load !== "Exhaust fan";
+  }
+  function showFanTypeMore(d, useKind) {
+    if (d.loggedDumb || showFanTypeMain(d, useKind)) return false;
+    return d.load === "Exhaust fan" && !!(d.fanType || d.kindOverride === "fan");
+  }
+  function moreHasContent(d, useKind) {
+    return true;
+  }
+  function revealInView(el) {
+    if (!el) return;
+    const run = () => {
+      try { el.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch (e) {}
+      const r = el.getBoundingClientRect();
+      const vv = window.visualViewport;
+      const top = vv ? vv.offsetTop : 0;
+      const height = vv ? vv.height : window.innerHeight;
+      if (r.top < 8 || r.bottom > height - 8) {
+        try { el.scrollIntoView({ block: "center", inline: "nearest" }); } catch (e) {}
+      }
+    };
+    run();
+    setTimeout(run, 280);
+    setTimeout(run, 550);
+    const vv = window.visualViewport;
+    if (vv && typeof vv.addEventListener === "function") {
+      const onResize = () => run();
+      vv.addEventListener("resize", onResize);
+      setTimeout(() => { try { vv.removeEventListener("resize", onResize); } catch (e) {} }, 800);
+    }
   }
   function usedLightTags(home, rec) {
     return findSameLoadAndPlace(home, rec).map((s) => s.qualifier || "");
@@ -582,7 +796,13 @@
     const pool = members.length ? members : (sw ? [sw] : []);
     const linked = Math.max(0, members.length - 1);
     const declared = Math.max(0, ...pool.map((m) => Number(m && m.otherSpots) || 0));
-    return Math.max(declared, linked);
+    let typ = 0;
+    pool.forEach((m) => {
+      const st = String((m && m.switchType) || "").toLowerCase().replace("-", "");
+      if (st === "4way") typ = Math.max(typ, 2);
+      else if (st === "3way") typ = Math.max(typ, 1);
+    });
+    return Math.max(declared, linked, typ);
   }
   function wayBadge(others) {
     others = Number(others) || 0;
@@ -599,8 +819,17 @@
     const kind = others >= 2 ? "4-way" : others === 1 ? "3-way" : "";
     if (!kind) return "";
     const members = membersOf(sw, home);
-    const idx = Math.max(0, members.findIndex((m) => m.id === sw.id));
+    let idx = Math.max(0, members.findIndex((m) => m.id === sw.id));
+    if (members.length <= 1) {
+      const gp = Number(sw && sw.groupPosition) || 0;
+      if (gp >= 1) idx = Math.min(others, gp - 1);
+    }
     return kind + " " + (idx + 1) + "/" + (others + 1);
+  }
+  function wayKindBadgeHtml(sw, home) {
+    const others = effectiveOthers(sw, home);
+    const kind = others >= 2 ? "4-way" : others === 1 ? "3-way" : "";
+    return kind ? ` <span class="badge-way">${esc(kind)}</span>` : "";
   }
   function positionBadgeHtml(sw, home) {
     const label = wayPositionLabel(sw, home);
@@ -1027,6 +1256,9 @@
     if (!state.store) startFreshStore();
     root.replaceChildren(renderMain());
     bindMain();
+    if (state.pendingMatch) revealInView(document.getElementById("sameOrNew"));
+    const flashEl = document.getElementById("flashBanner");
+    if (state.flash && flashEl) revealInView(flashEl);
   }
   function renderMigrate() {
     const buf = state.migrateBuf || "";
@@ -1055,7 +1287,7 @@
         <button type="button" class="btn" data-tab="homes" aria-current="${state.tab==="homes"?"page":"false"}">Homes</button>
       </div>
       ${!state.storageOk && state.storageNote ? `<div class="banner danger">${esc(state.storageNote)}</div>` : ""}
-      ${state.flash ? `<div class="banner ${state.storageOk ? "ok" : "danger"}">${esc(state.flash)}</div>` : ""}
+      ${state.flash ? `<div class="banner ${state.storageOk ? "ok" : "danger"}" id="flashBanner">${esc(state.flash)}</div>` : ""}
       <div id="main"></div>`;
     wrap.querySelector("#main").append(state.tab === "summary" ? renderSummary(home) : state.tab === "homes" ? renderHomes(home) : renderWalk(home));
     return wrap;
@@ -1068,12 +1300,12 @@
       const cur = p.tag || "";
       const chips = ["Island","Sink","Front","Back","Left","Right","#2","#3","#4"];
       const chipHtml = `<div class="chips" data-field="pendingTag">` + chips.map((v) => `<button type="button" class="chip" data-value="${esc(v)}" aria-pressed="${cur===v?"true":"false"}">${esc(v)}</button>`).join("") + `</div>`;
-      return `<div class="card mw" id="sameOrNew"><p>New light. Add a short name so it stays separate. If you skip this, it will be called ${esc(suggest)}.</p>${chipHtml}<div class="row" style="margin-top:10px"><button type="button" class="btn primary" id="newLightOk">Save as new light</button><button type="button" class="btn" id="pendingBack">Back</button></div></div>`;
+      return `<div class="card mw prompt-card" id="sameOrNew"><p>New light. Add a short name so it stays separate. If you skip this, it will be called ${esc(suggest)}.</p>${chipHtml}<div class="row" style="margin-top:10px"><button type="button" class="btn primary" id="newLightOk">Save as new light</button><button type="button" class="btn" id="pendingBack">Back</button></div></div>`;
     }
     const cands = p.candidates || [];
     const load = shortLoadName(p.rec) || p.rec.load || "this light";
     const btns = cands.map((c) => `<button type="button" class="btn primary" data-same-light="${c.id}">Same light as ${esc(listLabel(c, home))}</button>`).join("");
-    return `<div class="card mw" id="sameOrNew"><p>This room already has ${esc(load)}. Is this the same light, or a new one?</p><div class="stack">${btns}<button type="button" class="btn" id="newLight">New light</button></div></div>`;
+    return `<div class="card mw prompt-card" id="sameOrNew"><p>This room already has ${esc(load)}. Is this the same light, or a new one?</p><div class="stack">${btns}<button type="button" class="btn" id="newLight">New light</button></div></div>`;
   }
   function finishNewLight(tag) {
     const p = state.pendingMatch; if (!p || !p.rec) return;
@@ -1115,30 +1347,28 @@
       if (n) return (effectiveRoom(d) || d.floor || "") + " " + (SHORT_LOAD[d.load] || loadBit) + count;
       return displayName({ floor: d.floor, load: d.load, loadOther: d.loadOther, qualifier: d.qualifier, fixtureCount: d.fixtureCount }, effectiveRoom(d) || "Room");
     })();
+    const fanMain = showFanTypeMain(d, useKind);
+    const fanMore = showFanTypeMore(d, useKind);
+    const moreHtml = `
+          ${fanMore ? `<div class="field-wrap">${fieldHead("Fan type", "fan", "AC uses a fan switch. DC uses an on/off (constant power); speed via fan remote/integration. Not sure is listed under Verify on site and stays off the order until you choose.")}${chipRow("fanType", FAN_TYPES, fanTypeLabel(d.fanType))}</div>` : ""}
+          <div class="field-wrap">${fieldHead("Note, optional")}<textarea data-field="note" placeholder="Anything to remember at this box">${esc(d.note)}</textarea></div>`;
     const frag = document.createElement("div");
     frag.innerHTML = `
-      ${pendingChoiceHtml(home)}
       <div class="card">
-        ${headingInfo(d.editId ? (d.loggedDumb ? "Change keep as is (not smart)" : "Edit switch") : "Add a switch", "addSwitch", "Survey every switch in order. Floor and room stay put after you save. If this room already has the same kind of light, you will be asked whether it is the same light or a new one. For a new one, pick a short name like Island or Sink. To add another switch for a light you already logged, even in another room, tap its name in the list of lights already logged.")}
+        ${headingInfo(d.editId ? (d.loggedDumb ? "Change keep as is (not smart)" : "Edit switch") : "Add a switch", "addSwitch", "Survey every switch in order. Floor and room stay put after you save. If this room already has the same kind of light, you will be asked whether it is the same light or a new one. For a new one, pick a short name like Island or Sink. To add another switch for a light you already logged, even in another room, start typing under What it controls and tap the matching name.")}
         <div class="field-wrap">${fieldHead("Where the switch is", "floor", "Floor and room are where this switch is.")}${chipRow("floor", FLOORS, d.floor)}</div>
         <div class="pair-grid">
         ${selectField("Room", "room", roomsForFloor(d.floor), d.room)}
-        ${selectField("What it controls", "load", LOADS, d.load)}
+        ${loadFieldHtml(home, d)}
         </div>
         ${d.room==="Other" ? `<div class="field-wrap">${fieldHead("Room name")}<input type="text" data-field="roomOther" value="${esc(d.roomOther)}" placeholder="Mudroom"></div>` : ""}
-        ${d.load==="Other" ? `<div class="field-wrap">${fieldHead("Name for what it controls")}<input type="text" data-field="loadOther" value="${esc(d.loadOther)}" placeholder="Stair lights"></div>` : ""}
-        ${existingLightsHtml(home, d)}
         ${isMultiFixture(d.load) ? (state.fixtureOpen ? `<div class="field-wrap" id="fixtureWrap">${fieldHead("Fixtures on this switch", "fixture", "Optional. How many fixtures this switch controls, e.g. 6 cans. Used only for a wattage warning at high counts, and a flicker/bypass note for 1–2 small LEDs on Inovelli without a neutral.")}${chipRow("fixtureCount", ["1","2","3","4","5","6","7","8","8+"], (d.fixtureMany || Number(d.fixtureCount) > 8) ? "8+" : (d.fixtureCount ? String(d.fixtureCount) : ""))}${(d.fixtureMany || Number(d.fixtureCount) > 8) ? `<input type="number" data-field="fixtureCount" inputmode="numeric" min="9" step="1" value="${esc(String(d.fixtureCount || ""))}" placeholder="9 or more">` : ""}<button type="button" class="fixture-add" id="fixtureHide">Hide fixture count</button></div>` : `<button type="button" class="fixture-add" id="fixtureOpen">+ fixture count</button>`) : ""}
-        ${!d.loggedDumb ? `<div class="field-wrap">${fieldHead("Switch type", "kind", "Filled in from what the switch controls. Tap once to change. Not sure if dimmable still orders a dimmer.")}${chipRow("kindOverride", ["Dimmer","On/off","Fan","Not sure if dimmable"], kindChipLabel(d.kindOverride || useKind || "dimmer"))}</div>` : ""}
-        ${useKind === "fan" && !d.loggedDumb ? `<div class="field-wrap">${fieldHead("Fan type", "fan", "AC uses a fan switch. DC uses an on/off (constant power); speed via fan remote/integration. Not sure is listed under Verify on site and stays off the order until you choose.")}${chipRow("fanType", FAN_TYPES, fanTypeLabel(d.fanType))}</div>` : ""}
+        ${!d.loggedDumb ? `<div class="field-wrap">${fieldHead("Switch type", "kind", "Filled in from what the switch controls. Tap once to change. Not sure if dimmable still orders a dimmer. Exhaust fans order an on/off switch.")}${chipRow("kindOverride", ["Dimmer","On/off","Fan","Not sure if dimmable"], kindChipLabel(d.kindOverride || useKind || "dimmer"))}</div>` : ""}
+        ${fanMain ? `<div class="field-wrap">${fieldHead("Fan type", "fan", "AC uses a fan switch. DC uses an on/off (constant power); speed via fan remote/integration. Not sure is listed under Verify on site and stays off the order until you choose.")}${chipRow("fanType", FAN_TYPES, fanTypeLabel(d.fanType))}</div>` : ""}
+        ${!d.loggedDumb ? `<div class="field-wrap">${fieldHead("Switches in this box", "gang", "How many switches share this wall box, including this one. Most are just one.")}${chipRow("gangSize", ["1","2","3","4"], String(d.gangSize))}</div>` : ""}
+        ${!d.loggedDumb && d.gangSize > 1 ? `<div class="field-wrap">${fieldHead("Which slot, left to right?", "slot", "Count from the left as you face the wall.")}${chipRow("gangPosition", Array.from({length:d.gangSize},(_,i)=>String(i+1)), String(d.gangPosition))}</div>` : ""}
         ${d.load ? `<div class="auto">${esc(preview)} · ${esc(orderHint(d, useKind))}.${badgeHtml(draftOthers(home, d))}</div>` : ""}
-        <div id="more" class="${state.moreOpen ? "" : "hidden"}" style="margin-top:8px">
-          ${!d.loggedDumb ? `<div class="field-wrap">${fieldHead("Also controlled from, optional", "otherSpots", "Skip this if you will log every switch. Use it only when the other end will not be logged. Linking later does not double-count.")}${chipRow("otherSpots", ["None","1 other spot (3-way)","2 other spots (4-way)"], otherSpotsLabel(draftOthers(home, d)))}</div>` : ""}
-          ${!d.loggedDumb ? `<div class="field-wrap">${fieldHead("Doorway or wall, optional", "location", "Optional. Tells two switches for the same light apart, for example top of stairs vs bottom.")}${chipRow("location", LOCATIONS, d.location)}</div>` : ""}
-          ${!d.loggedDumb && d.location==="Other" ? `<div class="field-wrap">${fieldHead("Custom spot")}<input type="text" data-field="locationOther" value="${esc(d.locationOther)}" placeholder="Landing"></div>` : ""}
-          <div class="field-wrap">${fieldHead("Switches in this box", "gang", "How many switches share this wall box, including this one. Most are just one.")}${chipRow("gangSize", ["1","2","3","4"], String(d.gangSize))}</div>
-          ${d.gangSize > 1 ? `<div class="field-wrap">${fieldHead("Which slot, left to right?", "slot", "Count from the left as you face the wall.")}${chipRow("gangPosition", Array.from({length:d.gangSize},(_,i)=>String(i+1)), String(d.gangPosition))}</div>` : ""}
-          <div class="field-wrap">${fieldHead("Note, optional")}<textarea data-field="note" placeholder="Anything to remember at this box">${esc(d.note)}</textarea></div>
+        <div id="more" class="${state.moreOpen ? "" : "hidden"}" style="margin-top:8px">${moreHtml}
         </div>
         <div class="stack" style="margin-top:8px">
           <div class="row">
@@ -1168,7 +1398,7 @@
         vs
       ].filter(Boolean).join(" · ");
       const item = `<button type="button" class="list-item ${isSmart(s) ? "" : "dumb"}" data-edit="${s.id}"><strong>${i + 1}. ${esc(listLabel(s, home))}${badge}</strong><span>${esc(sub)}</span></button>`;
-      if (s.groupId) html += `<div class="logged-row">${item}<button type="button" class="btn" data-unlink="${s.id}">Unlink</button></div>`;
+      if (s.groupId) html += `<div class="logged-row">${item}<button type="button" class="btn-unlink" data-unlink="${s.id}" aria-label="Unlink">Unlink</button></div>`;
       else html += item;
     });
     html += `</div></div>`;
@@ -1213,7 +1443,7 @@
     const others = Math.max(0, (g.planned || g.n || members.length) - 1);
     let html = `<div class="field-wrap" style="margin-bottom:14px"><p><strong>${esc(g.name)}</strong>${badgeHtml(others)}<br><span class="sub">${esc(g.way)} · ${esc(g.locs)}</span></p>`;
     members.forEach((m, i) => {
-      html += `<div class="logged-row"><button type="button" class="list-item" data-edit="${m.id}"><strong>${i+1} of ${others+1} · ${esc(locPair(m.floor, roomNameOf(m, home)))}</strong><span>${esc(roleOf(m, home) === "Companion" ? "Extra switch" : "Main (smart)")}</span></button>${m.groupId ? `<button type="button" class="btn" data-unlink="${m.id}">Unlink</button>` : ""}</div>`;
+      html += `<div class="logged-row"><button type="button" class="list-item" data-edit="${m.id}"><strong>${esc(wayPositionLabel(m, home) || ((i+1)+" of "+(others+1)))} · ${esc(locPair(m.floor, roomNameOf(m, home)))}</strong><span>${esc(roleOf(m, home) === "Companion" ? "Extra switch" : "Main (smart)")}${positionBadgeHtml(m, home)}</span></button>${m.groupId ? `<button type="button" class="btn-unlink" data-unlink="${m.id}" aria-label="Unlink">Unlink</button>` : ""}</div>`;
     });
     const cands = mergeCandidates(home, g);
     if (cands.length && members[0]) {
@@ -1266,34 +1496,206 @@
     if (!blocks.length) return "";
     return `<div class="card">${headingInfo("Merge switches", "merge", "If two switches control the same light but were not grouped, merge them here.")}${blocks.join("")}</div>`;
   }
+
+  function installDeviceLabel(sw, home) {
+    if (!isSmart(sw) && !sw.groupId) return { device: "Keep as is (not smart) — leave this switch", part: "" };
+    if (isVerifyDevice(sw, home)) return { device: "Verify on site before installing", part: "" };
+    const role = roleOf(sw, home);
+    const brand = home.brand || "undecided";
+    if (role === "Companion") {
+      const part = skuFor(brand, "companion");
+      return { device: part ? "Companion — " + part : "Companion (extra switch)", part: part || "" };
+    }
+    const kind = buyKind(sw, home) || shopKind(sw);
+    const part = skuFor(brand, kind);
+    const generic = "Smart " + kindLabel(kind);
+    return { device: part ? generic + " — " + part : generic, part: part || "" };
+  }
+  function installNotes(sw, home) {
+    const notes = [];
+    if (isUnsureDimmable(sw) || (sw.groupId && (home.switches || []).some((m) => m.groupId === sw.groupId && isUnsureDimmable(m)))) {
+      notes.push("Not sure if dimmable: set to on/off mode if the bulbs don't dim, or swap to dimmable LEDs.");
+    }
+    if (needsFanType(sw) || (shopKind(sw) === "fan")) {
+      const ft = fanTypeOf(sw);
+      if (ft === "ac") notes.push("AC fan — install a fan speed switch.");
+      else if (ft === "dc") notes.push("DC fan — install an on/off (constant power; speed via fan remote/integration).");
+      else if (isVerifyFan(sw)) notes.push("Confirm whether this fan is AC or DC before installing.");
+    }
+    if (sw.load === "Exhaust fan") notes.push("Exhaust fan — on/off switch, not a fan speed switch.");
+    const n = fixtureCountOf(sw);
+    if (n >= 6) notes.push("High fixture count (x" + n + ") — check wattage limit.");
+    if (sw.note) notes.push(sw.note);
+    return notes;
+  }
+  function otherEndsLine(sw, home) {
+    const pos = wayPositionLabel(sw, home);
+    if (!pos) return "";
+    const members = membersOf(sw, home);
+    const others = members.filter((m) => m.id !== sw.id).map((m) => {
+      const place = locPair(m.floor, roomNameOf(m, home));
+      const loc = locLabel(m);
+      return loc ? place + " (" + loc + ")" : place;
+    });
+    const unlogged = Math.max(0, (effectiveOthers(sw, home) + 1) - members.length);
+    if (unlogged === 1) others.push("not logged");
+    else if (unlogged > 1) others.push(unlogged + " not logged");
+    if (!others.length) return pos;
+    return pos + ", other end" + (others.length === 1 ? "" : "s") + ": " + others.join(", ");
+  }
+  function brandWantsMain(home) {
+    return home.brand === "inovelli" || home.brand === "caseta";
+  }
+  function installRoleLine(sw, home) {
+    if (!wayPositionLabel(sw, home)) return "";
+    const role = roleOf(sw, home);
+    if (brandWantsMain(home)) {
+      return role === "Companion" ? "Companion — not the main smart switch" : "Main — install the smart switch in this location";
+    }
+    if (role === "Companion") return "Extra switch";
+    return "Smart switch";
+  }
+  function boxGroupsInRoom(home, floor, room) {
+    const list = (home.switches || []).filter((s) => s.floor === floor && roomNameOf(s, home) === room);
+    const used = {};
+    const boxes = [];
+    list.forEach((sw) => {
+      if (used[sw.id]) return;
+      const size = Number(sw.gangSize) || 1;
+      const members = [sw];
+      used[sw.id] = true;
+      if (size > 1) {
+        list.forEach((other) => {
+          if (used[other.id]) return;
+          if ((Number(other.gangSize) || 1) !== size) return;
+          const pos = Number(other.gangPosition) || 1;
+          if (members.some((m) => (Number(m.gangPosition) || 1) === pos)) return;
+          members.push(other);
+          used[other.id] = true;
+        });
+      }
+      members.sort((a, b) => (Number(a.gangPosition) || 1) - (Number(b.gangPosition) || 1));
+      boxes.push({ size, slots: members });
+    });
+    return boxes;
+  }
+  function installFloors(home) {
+    const floors = [];
+    (home.switches || []).forEach((s) => {
+      const f = s.floor || "";
+      if (floors.indexOf(f) === -1) floors.push(f);
+    });
+    return floors.map((floor) => {
+      const rooms = [];
+      (home.switches || []).forEach((s) => {
+        if ((s.floor || "") !== floor) return;
+        const name = roomNameOf(s, home);
+        if (rooms.indexOf(name) === -1) rooms.push(name);
+      });
+      return { floor, rooms: rooms.map((room) => ({ room, boxes: boxGroupsInRoom(home, floor, room) })) };
+    });
+  }
+  function installSlotHtml(sw, home, boxSize) {
+    const slot = boxSize > 1 ? ("Slot " + (Number(sw.gangPosition) || 1) + " · ") : "";
+    const controls = (sw.load === "Other" ? (sw.loadOther || "Other") : sw.load) + (sw.qualifier ? " (" + sw.qualifier + ")" : "");
+    const dev = installDeviceLabel(sw, home);
+    const way = otherEndsLine(sw, home);
+    const role = installRoleLine(sw, home);
+    const notes = installNotes(sw, home);
+    return `<div class="install-slot" data-install-slot="${sw.id}"><strong>${esc(slot + controls)}</strong><span class="sub">${esc(dev.device)}</span>${way ? `<span class="sub">${esc(way)}</span>` : ""}${role ? `<span class="sub">${esc(role)}</span>` : ""}${notes.map((n) => `<span class="sub">${esc(n)}</span>`).join("")}</div>`;
+  }
+  function installListHtml(home) {
+    const floors = installFloors(home);
+    if (!floors.length) return `<p class="hint">Log switches on the Survey tab to build the install list.</p>`;
+    return `<div class="install-list" id="installList">${floors.map((f) => `<div class="install-floor"><h2>${esc(f.floor || "Floor")}</h2>${f.rooms.map((r) => `<div class="install-room"><h3>${esc(r.room)}</h3>${r.boxes.map((b) => `<div class="install-box"><div class="install-box-title">${b.size}-gang box</div>${b.slots.map((sw) => installSlotHtml(sw, home, b.size)).join("")}</div>`).join("")}</div>`).join("")}</div>`).join("")}</div>`;
+  }
+  function installCsv(home) {
+    const header = ["Floor","Room","Box","Slot","Controls","Device","Part","Multi-way","Role","Notes"].map(csvEscape).join(",");
+    const lines = [header];
+    installFloors(home).forEach((f) => {
+      f.rooms.forEach((r) => {
+        r.boxes.forEach((b, bi) => {
+          b.slots.forEach((sw) => {
+            const dev = installDeviceLabel(sw, home);
+            const controls = (sw.load === "Other" ? (sw.loadOther || "Other") : sw.load) + (sw.qualifier ? " (" + sw.qualifier + ")" : "");
+            lines.push([
+              f.floor, r.room, b.size + "-gang", String(Number(sw.gangPosition) || 1),
+              controls, dev.device, dev.part, otherEndsLine(sw, home), installRoleLine(sw, home),
+              installNotes(sw, home).join(" ")
+            ].map(csvEscape).join(","));
+          });
+        });
+      });
+    });
+    return lines.join("\n");
+  }
+  function installText(home) {
+    const bits = ["Install list — " + (home.name || "Switch Survey")];
+    if (home.brand === "inovelli") bits.push("Brand: Inovelli");
+    else if (home.brand === "caseta") bits.push("Brand: Lutron Caseta");
+    installFloors(home).forEach((f) => {
+      bits.push("", f.floor || "Floor");
+      f.rooms.forEach((r) => {
+        bits.push("  " + r.room);
+        r.boxes.forEach((b) => {
+          bits.push("    " + b.size + "-gang box");
+          b.slots.forEach((sw) => {
+            const dev = installDeviceLabel(sw, home);
+            const controls = (sw.load === "Other" ? (sw.loadOther || "Other") : sw.load) + (sw.qualifier ? " (" + sw.qualifier + ")" : "");
+            const slot = b.size > 1 ? "Slot " + (Number(sw.gangPosition) || 1) + ": " : "";
+            bits.push("      " + slot + controls);
+            bits.push("        " + dev.device);
+            const way = otherEndsLine(sw, home);
+            if (way) bits.push("        " + way);
+            const role = installRoleLine(sw, home);
+            if (role) bits.push("        " + role);
+            installNotes(sw, home).forEach((n) => bits.push("        " + n));
+          });
+        });
+      });
+    });
+    return bits.join("\n");
+  }
   function renderSummary(home) {
     const { s, rows, notes } = orderRows(home);
     const brandVal = home.brand === "caseta" ? "Lutron Caseta" : home.brand === "inovelli" ? "Inovelli" : "Undecided";
     const frag = document.createElement("div");
     frag.innerHTML = `
-      <div class="card"><label class="field">Home name</label><input type="text" id="homeName" placeholder="Name this house" value="${esc(home.name)}" autocomplete="off">
-        <div class="field-wrap" style="margin-top:8px">${fieldHead("Brand", "brand", "Survey stays brand-neutral. Pick a brand when you are ready to order.")}${chipRow("brand", BRANDS, brandVal)}</div>
+      <div class="card no-print"><label class="field">Home name</label><input type="text" id="homeName" placeholder="Name this house" value="${esc(home.name)}" autocomplete="off">
+        <div class="field-wrap" style="margin-top:8px">${fieldHead("Brand", "brand", "Survey stays brand-neutral. Pick a brand when you are ready to order. The install list uses that brand’s part when you pick one.")}${chipRow("brand", BRANDS, brandVal)}</div>
         ${neutralsOverrideHtml(home)}
         </div>
-      <div class="summary-grid">
-      <div class="card"><h2>Order list</h2>
+      <div class="card" id="installCard">${headingInfo("Install list", "installList", "For the electrician, in the order you walked. Boxes are grouped by floor and room. Each slot says what to install, and where the other end of a 3-way or 4-way is.")}
+        <div class="row install-actions no-print">
+          <button type="button" class="btn primary" id="printInstall">Print / Save PDF</button>
+          <button type="button" class="btn" id="exportInstallCsv">Export install CSV</button>
+          <button type="button" class="btn" id="shareInstall">Share list</button>
+        </div>
+        ${installListHtml(home)}
+      </div>
+      <div class="no-print">
+        <button type="button" class="parts-toggle" id="toggleParts" aria-expanded="${state.summaryShowParts ? "true" : "false"}">${state.summaryShowParts ? "Hide parts to order" : "Show parts to order"}</button>
+      </div>
+      <div class="summary-grid order-sheet" id="orderSheet" style="${state.summaryShowParts ? "" : "display:none"}">
+      <div class="card"><h2>Parts to order</h2>
         <table><thead><tr><th>Item</th><th>Qty</th><th>Part</th></tr></thead>
         <tbody>${rows.length ? rows.map((r)=>`<tr><td>${esc(r.item)}</td><td>${r.qty}</td><td>${esc(r.part)}</td></tr>`).join("") : "<tr><td colspan=3>None yet</td></tr>"}</tbody></table>
         ${notes && notes.length ? notes.map((n)=>`<p class="hint">${esc(n)}</p>`).join("") : ""}
         ${s.companion ? fieldHead("Companions", "companions", "Companions are the extra switches in a 3-way or 4-way. Only one smart main is needed per light.") : ""}
-        <p class="hint">${s.dumb} Keep as is (not smart)${s.dumb===1?"":" switches"} (not ordered). ${s.locations} location${s.locations===1?"":"s"} logged.</p></div>
+        <p class="hint">${s.dumb} Keep as is (not smart)${s.dumb===1?"":" switches"} (not ordered). ${s.locations} location${s.locations===1?"":"s"} logged.</p>
+        <div class="stack no-print" style="margin-top:10px"><button type="button" class="btn" id="exportCsv">Export CSV order sheet</button></div>
+      </div>
       <div class="summary-side">
       ${s.verifyOnSite && s.verifyOnSite.length ? `<div class="card"><h2>Verify on site</h2>${s.verifyOnSite.map((v)=>`<p><strong>${esc(v.name)}</strong><br><span class="sub">${esc(v.floor)} ${esc(v.room)} · ${esc(v.why)}</span></p>`).join("")}</div>` : ""}
       ${s.groups.length ? `<div class="card">${headingInfo("3-way and 4-way", "groups", "Detected automatically from the same light. A 3-way is two locations (1 smart switch + 1 companion). A 4-way is three locations (1 smart switch + 2 companions). Unlink or merge here if a group is wrong. “Main” is a starting guess for the smart switch.")}${s.groups.map((g)=>summaryGroupHtml(g, home)).join("")}</div>` : ""}
       ${ungroupedMergeHtml(home)}
       ${s.issues.length ? `<div class="card"><h2>Open issues</h2>${s.issues.map((i)=>`<p>${esc(i)}</p>`).join("")}</div>` : ""}
-      <div class="card"><h2>Export this home</h2><div class="stack">
-        <button type="button" class="btn primary" id="exportJson">Export JSON backup</button>
-        <button type="button" class="btn" id="exportCsv">Export CSV order sheet</button>
-        <button type="button" class="btn" id="shareBtn">Copy / Share</button>
-      </div></div>
       </div>
-      </div>`;
+      </div>
+      <div class="card no-print"><h2>Backup</h2><div class="stack">
+        <button type="button" class="btn" id="exportJson">Export JSON backup</button>
+        <button type="button" class="btn" id="shareBtn">Copy / Share backup</button>
+      </div></div>`;
     return frag;
   }
   function renderHomes(home) {
@@ -1366,7 +1768,7 @@
       state.migrateBusy = false;
     }
   }
-  function flash(msg) { state.flash = msg; setTimeout(() => { if (state.flash === msg) { state.flash = ""; render(); } }, 4000); }
+  function flash(msg) { state.flash = msg; render(); setTimeout(() => { if (state.flash === msg) { state.flash = ""; render(); } }, 4000); }
   function bindMain() {
     document.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => { state.tab = b.getAttribute("data-tab"); persist(); render(); }));
     const name = document.getElementById("homeName");
@@ -1375,9 +1777,11 @@
       const field = btn.parentElement.getAttribute("data-field");
       btn.addEventListener("click", () => onChip(field, btn.getAttribute("data-value")));
     });
+    bindLoadInput();
     document.querySelectorAll("select[data-field], input[data-field], textarea[data-field]").forEach((el) => {
       el.addEventListener("input", () => {
         const field = el.getAttribute("data-field");
+        if (field === "loadQuery") return;
         state.draft[field] = el.value;
         if (field === "load") state.draft.kindOverride = "";
         if (field === "load") {
@@ -1453,6 +1857,10 @@
     document.querySelectorAll("select[data-merge-from]").forEach((el) => el.addEventListener("change", () => { if (el.value) mergeSwitches(el.getAttribute("data-merge-from"), el.value); }));
     document.getElementById("exportJson")?.addEventListener("click", () => download(fileName(homeOf(), "json"), exportJson({ version:1, kind:"ha-switch-survey", homes:[homeOf()], activeHomeId: homeOf().id }), "application/json"));
     document.getElementById("exportCsv")?.addEventListener("click", () => download(fileName(homeOf(), "csv"), orderCsv(homeOf()), "text/csv"));
+    document.getElementById("exportInstallCsv")?.addEventListener("click", () => download(fileName(homeOf(), "install.csv"), installCsv(homeOf()), "text/csv"));
+    document.getElementById("printInstall")?.addEventListener("click", () => window.print());
+    document.getElementById("toggleParts")?.addEventListener("click", () => { state.summaryShowParts = !state.summaryShowParts; render(); });
+    document.getElementById("shareInstall")?.addEventListener("click", shareInstallList);
     document.getElementById("exportAll")?.addEventListener("click", () => download("switch-survey-all.json", exportJson(state.store), "application/json"));
     document.getElementById("shareBtn")?.addEventListener("click", shareHome);
     document.getElementById("addHome")?.addEventListener("click", addHome);
@@ -1576,6 +1984,11 @@
     persist(); render();
   }
   function saveSwitch(asDumb) {
+    if (state.pendingMatch && state.pendingMatch.rec) {
+      flash("Choose whether this is the same light or a new one.");
+      return;
+    }
+    if (state.loadTyping) commitLoadQuery();
     const d = state.draft, home = homeOf();
     if (!d.room) { flash("Choose a room."); return; }
     if (!d.load) { flash("Choose what it controls."); return; }
@@ -1763,6 +2176,15 @@
     a.href = URL.createObjectURL(blob); a.download = name; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     flash("Downloaded " + name);
+  }
+
+  async function shareInstallList() {
+    const home = homeOf();
+    const text = installText(home);
+    try {
+      if (navigator.share) { await navigator.share({ title: "Install list — " + (home.name || "Switch Survey"), text }); flash("Shared."); return; }
+    } catch (e) { if (e && e.name === "AbortError") return; }
+    try { await navigator.clipboard.writeText(text); flash("Copied install list."); } catch { download(fileName(home, "install.txt"), text, "text/plain"); }
   }
   async function shareHome() {
     const home = homeOf();
