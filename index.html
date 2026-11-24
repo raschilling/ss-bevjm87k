@@ -47,6 +47,7 @@
     label.field { display: block; font-size: .78rem; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
     .field-wrap { margin: 0 0 12px; }
     select, input[type=text], input[type=number], textarea { width: 100%; max-width: 420px; min-height: var(--tap); border: 1.5px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--ink); padding: 10px 12px; font-size: 16px; display: block; }
+    input[data-field="fixtureCount"] { max-width: 7rem; margin-top: 8px; }
     textarea { min-height: 72px; resize: vertical; }
     .chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .chip { appearance: none; border: 1.5px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 999px; min-height: 44px; padding: 8px 14px; font-weight: 600; }
@@ -117,6 +118,8 @@
   const FLOORS = ["Basement","Main","Upper","Exterior"];
   const ROOMS = ["Basement","Bedroom","Closet","Dining room","Exterior","Family room","Foyer","Garage","Guest bath","Half bath","Hall","Kitchen","Laundry","Living room","Office","Primary bath","Primary bedroom","Stairs","Other"];
   const LOADS = ["Can lights","Ceiling fan","Chandelier","Closet light","Exhaust fan","Exterior lights","Fan + light","Flood lights","Lamp outlet","Pendants","Sconces","Under-cabinet","Vanity light","Wafer lights","Other"];
+  const MULTI_FIXTURE_LOADS = ["Can lights","Chandelier","Exterior lights","Flood lights","Pendants","Sconces","Under-cabinet","Wafer lights"];
+  const SHORT_LOAD = {"Can lights":"cans","Wafer lights":"wafers","Sconces":"sconces","Pendants":"pendants","Under-cabinet":"under-cabinet","Chandelier":"chandelier","Flood lights":"floods","Exterior lights":"exterior lights"};
   const QUALIFIERS = ["Left","Right","Front","Back","Upper","Lower","1","2","3","4"];
   const LOCATIONS = ["Entry","Hall","Top of stairs","Bottom of stairs","Garage door","Back door","Bedside","Other"];
   const BRANDS = ["Undecided","Inovelli","Lutron Caseta"];
@@ -137,13 +140,19 @@
   function uid(prefix) { return prefix + "_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
   function blankHome() { return { id: uid("home"), name: "", brand: "undecided", neutrals: "unknown", rooms: [], switches: [], isExample: false }; }
   function emptyDraft(floor, room) {
-    return { editId: "", floor: floor || "Main", room: room || "", roomOther: "", load: "", loadOther: "", qualifier: "", location: "", locationOther: "", gangSize: 1, gangPosition: 1, loggedDumb: false, note: "", kindOverride: "", fanType: "", otherSpots: 0, groupId: "" };
+    return { editId: "", floor: floor || "Main", room: room || "", roomOther: "", load: "", loadOther: "", qualifier: "", location: "", locationOther: "", gangSize: 1, gangPosition: 1, loggedDumb: false, note: "", kindOverride: "", fanType: "", otherSpots: 0, fixtureCount: "", fixtureMany: false, lightElsewhere: false, lightFloor: "", lightRoom: "", lightRoomOther: "", groupId: "" };
   }
   function defaultStore() { const home = blankHome(); return { version: 1, kind: "ha-switch-survey", homes: [home], activeHomeId: home.id }; }
   function homeOf() { const s = state.store; return s.homes.find((h) => h.id === s.activeHomeId) || s.homes[0]; }
   function setHome(next) { const s = state.store; s.homes = s.homes.map((h) => h.id === next.id ? next : h); persist(); }
   function effectiveLoad(d) { return d.load === "Other" ? (d.loadOther || "Other").trim() : d.load; }
   function effectiveRoom(d) { return d.room === "Other" ? (d.roomOther || "Other").trim() : d.room; }
+  function effectiveLightRoom(d) {
+    if (!d.lightElsewhere) return effectiveRoom(d);
+    if (d.lightRoom === "Other") return (d.lightRoomOther || "").trim() || "Other";
+    return d.lightRoom || effectiveRoom(d);
+  }
+  function isMultiFixture(load) { return MULTI_FIXTURE_LOADS.indexOf(load) !== -1; }
   function effectiveLocation(d) { return d.location === "Other" ? (d.locationOther || "").trim() : d.location; }
   function locLabel(sw) {
     if (sw.location === "Other") return (sw.locationOther || "Other").trim();
@@ -166,16 +175,52 @@
     }
     return "orders as a " + kindLabel(useKind || "dimmer");
   }
-  function groupKeyOf(sw) {
+  function groupKeyOf(sw, home) {
     const load = sw.load === "Other" ? "Other" : sw.load;
     const extra = load === "Other" ? "|" + (sw.loadOther || sw.note || "").trim() : "";
-    return (sw.floor || "") + "|" + load + "|" + (sw.qualifier || "") + extra;
+    if (load === "Other") return "Other|" + extra + "|" + (sw.qualifier || "");
+    return lightFloorOf(sw) + "|" + lightRoomOf(sw, home) + "|" + load + "|" + (sw.qualifier || "") + extra;
+  }
+  function lightFloorOf(sw) { return (sw.lightFloor || "").trim() || sw.floor || ""; }
+  function lightRoomOf(sw, home) {
+    const explicit = (sw.lightRoom || "").trim();
+    if (explicit) return explicit;
+    if (sw.room && !sw.roomId) return sw.room === "Other" ? (sw.roomOther || "Other") : sw.room;
+    return home ? roomNameOf(sw, home) : (sw.room || "");
+  }
+  function lightIsElsewhere(sw, home) {
+    const lf = (sw.lightFloor || "").trim();
+    const lr = (sw.lightRoom || "").trim();
+    if (!lf && !lr) return false;
+    return lightFloorOf(sw) !== (sw.floor || "") || lightRoomOf(sw, home) !== roomNameOf(sw, home);
+  }
+  function locPair(floor, room) { return [floor, room].filter(Boolean).join(" "); }
+  function switchVsLight(sw, home) {
+    if (!lightIsElsewhere(sw, home)) return "";
+    return "Switch: " + locPair(sw.floor, roomNameOf(sw, home)) + " → Light: " + locPair(lightFloorOf(sw), lightRoomOf(sw, home));
+  }
+  function fixtureCountOf(sw) { const n = Number(sw.fixtureCount); return n > 0 ? n : 0; }
+  function shortLoadName(sw) {
+    if (sw.load === "Other") return (sw.loadOther || "other").toLowerCase();
+    return SHORT_LOAD[sw.load] || (sw.load || "").toLowerCase();
+  }
+  function listLabel(sw, home) {
+    const n = fixtureCountOf(sw);
+    const room = roomNameOf(sw, home);
+    const count = n ? " x" + n : "";
+    if (lightIsElsewhere(sw, home)) {
+      return locPair(sw.floor, room) + " switch → " + locPair(lightFloorOf(sw), lightRoomOf(sw, home)) + " " + shortLoadName(sw) + count;
+    }
+    if (n) return (room || sw.floor || "") + " " + shortLoadName(sw) + count;
+    return displayName(sw, room);
   }
   function displayName(sw, roomName) {
     const load = sw.load === "Other" ? (sw.loadOther || "Other") : sw.load;
     const q = sw.qualifier || "";
-    if (/^[1-4]$/.test(q)) return [sw.floor, roomName, q, load].filter(Boolean).join(" ");
-    return [sw.floor, roomName, load, q].filter(Boolean).join(" ");
+    const n = fixtureCountOf(sw);
+    const count = n ? " x" + n : "";
+    if (/^[1-4]$/.test(q)) return [sw.floor, roomName, q, load].filter(Boolean).join(" ") + count;
+    return [sw.floor, roomName, load, q].filter(Boolean).join(" ") + count;
   }
   function roomNameOf(sw, home) { const r = (home.rooms || []).find((x) => x.id === sw.roomId); return r ? r.name : ""; }
   function isSmart(sw) { return sw.loggedDumb !== true; }
@@ -205,8 +250,8 @@
     return k;
   }
   function findMatches(home, rec) {
-    const key = groupKeyOf(rec);
-    return home.switches.filter((s) => s.id !== rec.id && isSmart(s) && groupKeyOf(s) === key && s.floor === rec.floor);
+    const key = groupKeyOf(rec, home);
+    return home.switches.filter((s) => s.id !== rec.id && isSmart(s) && groupKeyOf(s, home) === key);
   }
   function applyGroup(switches, groupId) {
     const members = switches.filter((s) => s.groupId === groupId);
@@ -336,7 +381,7 @@
       const first = members[0];
       const load = first.load === "Other" ? (first.loadOther || "Other") : first.load;
       const others = effectiveOthers(first, home);
-      const locs = members.map((m) => roomNameOf(m, home) + (locLabel(m) ? " (" + locLabel(m) + ")" : "")).join("; ");
+      const locs = members.map((m) => { const base = locPair(m.floor, roomNameOf(m, home)) + (locLabel(m) ? " (" + locLabel(m) + ")" : ""); const vs = switchVsLight(m, home); return vs ? base + " · " + vs : base; }).join("; ");
       const extra = others + 1 > members.length ? "; " + (others + 1 - members.length) + " more not logged yet" : "";
       return { id, name: load, way: wayBadge(others) || wayLabel(members.length), locs: locs + extra, n: members.length, planned: others + 1 };
     }).filter((g) => g.planned >= 2 || g.n >= 2);
@@ -362,6 +407,8 @@
         : "Most boxes do not have a neutral. Most dimmers can work without one; on/off and some fan models often need one.");
     else if (home.neutrals === "mixed") issues.push("Neutrals are mixed. Confirm boxes for on/off and fan devices, and whether Inovelli dimmers on small LED loads need a bypass.");
     if (groups.length) issues.push("Confirm traveler wiring and which box has line for " + groups.length + " multi-way group" + (groups.length === 1 ? "" : "s") + ". Put the smart main where line and, if possible, a neutral arrive.");
+    const heavy = home.switches.filter((s) => isSmart(s) && fixtureCountOf(s) >= 6);
+    if (heavy.length) issues.push("Check that the total fixture wattage stays within the switch's rating for: " + heavy.map((s) => listLabel(s, home)).join("; ") + ". This matters most with many LED cans or wafers on a dimmer.");
     return { dimmer, onoff, fan, companion, dumb, dcFanOnOff, plates, groups, issues, verifyOnSite, locations: home.switches.length };
   }
   function orderRows(home) {
@@ -393,12 +440,12 @@
       lines.push("", "VERIFY ON SITE", "Floor,Room,Name,Why");
       s.verifyOnSite.forEach((v) => lines.push([v.floor, v.room, v.name, v.why].map(csvEscape).join(",")));
     }
-    lines.push("", "BY FLOOR / ROOM", "Floor,Room,Name,Which one,Plan,Also controlled from,Switches in box,Location,Note");
+    lines.push("", "BY FLOOR / ROOM", "Floor,Room,Name,Which one,Fixtures,Plan,Also controlled from,Switch vs light,Switches in box,Location,Note");
     (home.rooms || []).forEach((room) => {
       home.switches.filter((sw) => sw.roomId === room.id).forEach((sw) => {
         const others = effectiveOthers(sw, home);
         const plan = (others ? wayBadge(others) + " " + (roleOf(sw, home) || "Main") : "") || (sw.groupId ? wayLabel(home.switches.filter((x) => x.groupId === sw.groupId).length) + " " + roleOf(sw, home) : (sw.loggedDumb ? "Regular (not smart)" : needsFanType(sw) ? (fanTypeOf(sw) === "ac" ? "Smart Fan (AC)" : fanTypeOf(sw) === "dc" ? "Smart On/off (DC fan, constant power)" : "Verify on site (fan type)") : "Smart " + kindLabel(shopKind(sw))));
-        lines.push([room.floor, room.name, displayName(sw, room.name), sw.qualifier || "", plan, otherSpotsLabel(others), sw.gangSize + " in box, #" + sw.gangPosition + " from left", locLabel(sw), sw.note || ""].map(csvEscape).join(","));
+        lines.push([room.floor, room.name, displayName(sw, room.name), sw.qualifier || "", fixtureCountOf(sw) || "", plan, otherSpotsLabel(others), switchVsLight(sw, home), sw.gangSize + " in box, #" + sw.gangPosition + " from left", locLabel(sw), sw.note || ""].map(csvEscape).join(","));
       });
     });
     if (s.groups.length) { lines.push("", "MULTI-WAY GROUPS", "Load,Way,Locations"); s.groups.forEach((g) => lines.push([g.name, g.way, g.locs].map(csvEscape).join(","))); }
@@ -661,14 +708,22 @@
     const derived = d.load ? kindForLoad(d.load === "Other" ? "Other" : d.load) : "";
     const useKind = d.kindOverride || derived;
     const showLoc = Boolean(state.pendingMatch || d.groupId);
-    const preview = displayName({ floor: d.floor, load: d.load, loadOther: d.loadOther, qualifier: d.qualifier }, effectiveRoom(d) || "Room");
+    const preview = (function () {
+      const n = Number(d.fixtureCount);
+      const count = n > 0 ? " x" + n : "";
+      const loadBit = (d.load === "Other" ? (d.loadOther || "other") : (SHORT_LOAD[d.load] || (d.load || ""))).toString();
+      if (d.lightElsewhere) return locPair(d.floor, effectiveRoom(d) || "Room") + " switch → " + locPair(d.lightFloor || d.floor, effectiveLightRoom(d) || "Room") + " " + loadBit + count;
+      if (n) return (effectiveRoom(d) || d.floor || "") + " " + (SHORT_LOAD[d.load] || loadBit) + count;
+      return displayName({ floor: d.floor, load: d.load, loadOther: d.loadOther, qualifier: d.qualifier, fixtureCount: d.fixtureCount }, effectiveRoom(d) || "Room");
+    })();
     let matchHtml = "";
     if (state.pendingMatch) {
       const m = state.pendingMatch.matches[0];
       const room = roomNameOf(m, home);
       const nextOthers = Math.max(draftOthers(home, d), state.pendingMatch.matches.length, ...state.pendingMatch.matches.map((x) => Number(x.otherSpots) || 0));
       const wayWord = nextOthers >= 2 ? "4-way" : "3-way";
-      matchHtml = `<div class="card mw"><p>Same light as ${esc(displayName(m, room))} in ${esc(m.floor + " " + room)}? This makes it a ${wayWord}.</p><div class="row"><button type="button" class="btn primary" id="linkYes">Link</button><button type="button" class="btn" id="linkNo">Different load</button></div></div>`;
+      const lightName = locPair(lightFloorOf(m), lightRoomOf(m, home)) + " " + (m.load === "Other" ? (m.loadOther || "Other") : m.load);
+      matchHtml = `<div class="card mw"><p>Same light as ${esc(lightName)}? This makes it a ${wayWord}.</p><div class="row"><button type="button" class="btn primary" id="linkYes">Link</button><button type="button" class="btn" id="linkNo">Different load</button></div></div>`;
     }
     const frag = document.createElement("div");
     frag.innerHTML = `
@@ -678,13 +733,16 @@
       <div class="card">
         <h2>${d.editId ? (d.loggedDumb ? "Change a regular switch" : "Edit switch") : "Add a switch"}</h2>
         <p class="hint">Pick floor, room, and what the switch controls, then save. Switch type is chosen from the load — tap to change. If two switches control the same light, use the same name at both ends. Floor and room stay put after you save.</p>
-        <div class="field-wrap"><label class="field">Floor</label>${chipRow("floor", FLOORS, d.floor)}</div>
+        <div class="field-wrap"><label class="field">Where the switch is</label>${chipRow("floor", FLOORS, d.floor)}<p class="hint">Floor and room are where this switch is, not necessarily where the light is.</p></div>
         <div class="pair-grid">
         ${selectField("Room", "room", ROOMS, d.room)}
         ${selectField("Load", "load", LOADS, d.load)}
         </div>
         ${d.room==="Other" ? `<div class="field-wrap"><label class="field">Room name</label><input type="text" data-field="roomOther" value="${esc(d.roomOther)}" placeholder="Mudroom"></div>` : ""}
         ${d.load==="Other" ? `<div class="field-wrap"><label class="field">Load name</label><input type="text" data-field="loadOther" value="${esc(d.loadOther)}" placeholder="Stair lights"></div>` : ""}
+        ${!d.loggedDumb ? `<div class="field-wrap"><button type="button" class="chip" id="lightElse" aria-pressed="${d.lightElsewhere ? "true" : "false"}">Light is somewhere else</button><p class="hint">Tap only if the light is in a different floor or room than this switch. Linking uses the light, so both ends of a 3-way can still match.</p></div>` : ""}
+        ${!d.loggedDumb && d.lightElsewhere ? `<div class="field-wrap"><label class="field">Light floor</label>${chipRow("lightFloor", FLOORS, d.lightFloor || d.floor)}</div><div class="field-wrap">${selectField("Light room", "lightRoom", ROOMS, d.lightRoom || d.room)}</div>${(d.lightRoom || d.room)==="Other" ? `<div class="field-wrap"><label class="field">Light room name</label><input type="text" data-field="lightRoomOther" value="${esc(d.lightRoomOther)}" placeholder="Stairwell"></div>` : ""}` : ""}
+        ${isMultiFixture(d.load) ? `<div class="field-wrap"><label class="field">How many?</label>${chipRow("fixtureCount", ["1","2","3","4","5","6","7","8","8+"], (d.fixtureMany || Number(d.fixtureCount) > 8) ? "8+" : (d.fixtureCount ? String(d.fixtureCount) : ""))}${(d.fixtureMany || Number(d.fixtureCount) > 8) ? `<input type="number" data-field="fixtureCount" inputmode="numeric" min="9" step="1" value="${esc(String(d.fixtureCount || ""))}" placeholder="9 or more">` : ""}<p class="hint">Optional. How many lights this switch controls, e.g. 6 cans in a hall.</p></div>` : ""}
         <div class="field-wrap"><label class="field">Which one? (only if this room has two)</label>${chipRow("qualifier", QUALIFIERS, d.qualifier)}<p class="hint">Skip unless the room has two switches for the same kind of light, e.g. Left/Right recessed.</p></div>
         ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Switch type</label>${chipRow("kindOverride", ["Dimmer","On/off","Fan"], kindChipLabel(useKind || "dimmer"))}<p class="hint">Filled in from what the switch controls. Tap once to change.</p></div>` : ""}
         ${useKind === "fan" && !d.loggedDumb ? `<div class="field-wrap"><label class="field">Fan type</label>${chipRow("fanType", FAN_TYPES, fanTypeLabel(d.fanType))}<p class="hint">AC uses a fan switch. DC uses an on/off (constant power); speed via fan remote/integration. Not sure is listed under Verify on site and stays off the order until you choose.</p></div>` : ""}
@@ -740,12 +798,12 @@
     }
     if (smart.length) {
       html += `<div class="card"><h2>Smart switches in ${esc(floor)} ${esc(room)}</h2><div class="stack">`;
-      smart.forEach((s) => { html += `<button type="button" class="list-item" data-edit="${s.id}"><strong>${esc(displayName(s, room))}${badgeHtml(effectiveOthers(s, home))}</strong><span>${s.gangPosition} of ${s.gangSize} in the box · ${esc(kindLabel(shopKind(s)))}</span></button>`; });
+      smart.forEach((s) => { html += `<button type="button" class="list-item" data-edit="${s.id}"><strong>${esc(listLabel(s, home))}${badgeHtml(effectiveOthers(s, home))}</strong><span>${s.gangPosition} of ${s.gangSize} in the box · ${esc(kindLabel(shopKind(s)))}</span></button>`; });
       html += `</div></div>`;
     }
     if (dumb.length) {
       html += `<div class="card"><h2>Regular switches in ${esc(floor)} ${esc(room)}</h2><div class="stack">`;
-      dumb.forEach((s) => { html += `<button type="button" class="list-item dumb" data-edit="${s.id}"><strong>${esc(displayName(s, room))}</strong><span>Regular (not smart) · tap to change</span></button>`; });
+      dumb.forEach((s) => { html += `<button type="button" class="list-item dumb" data-edit="${s.id}"><strong>${esc(listLabel(s, home))}</strong><span>Regular (not smart) · tap to change</span></button>`; });
       html += `</div></div>`;
     }
     const box = document.createElement("div"); box.innerHTML = html; return box;
@@ -881,8 +939,22 @@
         const field = el.getAttribute("data-field");
         state.draft[field] = el.value;
         if (field === "load") state.draft.kindOverride = "";
+        if (field === "fixtureCount") {
+          state.draft.fixtureMany = Number(el.value) > 8 || state.draft.fixtureMany;
+          persist();
+          return;
+        }
         persist(); render();
       });
+    });
+    document.getElementById("lightElse")?.addEventListener("click", () => {
+      const d = state.draft;
+      d.lightElsewhere = !d.lightElsewhere;
+      if (d.lightElsewhere) {
+        d.lightFloor = d.lightFloor || d.floor;
+        d.lightRoom = d.lightRoom || d.room;
+      }
+      persist(); render();
     });
     document.getElementById("moreToggle")?.addEventListener("click", () => { state.moreOpen = !state.moreOpen; render(); });
     document.getElementById("saveSw")?.addEventListener("click", () => saveSwitch(false));
@@ -934,6 +1006,18 @@
     }
     else if (field === "gangSize") { state.draft.gangSize = Number(value); if (state.draft.gangPosition > state.draft.gangSize) state.draft.gangPosition = 1; }
     else if (field === "gangPosition") state.draft.gangPosition = Number(value);
+    else if (field === "fixtureCount") {
+      if (value === "8+") {
+        state.draft.fixtureMany = true;
+        if (!Number(state.draft.fixtureCount) || Number(state.draft.fixtureCount) <= 8) state.draft.fixtureCount = "";
+      } else if (state.draft.fixtureCount === value && !state.draft.fixtureMany) {
+        state.draft.fixtureCount = "";
+        state.draft.fixtureMany = false;
+      } else {
+        state.draft.fixtureMany = false;
+        state.draft.fixtureCount = value;
+      }
+    }
     else state.draft[field] = value;
     persist(); render();
   }
@@ -952,6 +1036,21 @@
       gangSize: Number(d.gangSize) || 1, gangPosition: Number(d.gangPosition) || 1,
       loggedDumb: asDumb, note: d.note || "", kindOverride: d.kindOverride || "",
       fanType: d.fanType || "", otherSpots: Number(d.otherSpots) || 0,
+      fixtureCount: Number(d.fixtureCount) || 0,
+      lightFloor: (function () {
+        if (!d.lightElsewhere) return "";
+        const lf = d.lightFloor || d.floor;
+        const lr = effectiveLightRoom(d);
+        if (lf === d.floor && lr === effectiveRoom(d)) return "";
+        return lf;
+      })(),
+      lightRoom: (function () {
+        if (!d.lightElsewhere) return "";
+        const lf = d.lightFloor || d.floor;
+        const lr = effectiveLightRoom(d);
+        if (lf === d.floor && lr === effectiveRoom(d)) return "";
+        return lr;
+      })(),
       groupId: d.groupId || "", switchType: "single", groupPosition: 1
     };
   }
@@ -1024,7 +1123,13 @@
       qualifier: sw.qualifier || "", location: LOCATIONS.includes(sw.location) ? sw.location : (sw.location ? "Other" : ""),
       locationOther: LOCATIONS.includes(sw.location) ? "" : (locLabel(sw)),
       gangSize: sw.gangSize, gangPosition: sw.gangPosition, loggedDumb: sw.loggedDumb,
-      note: sw.note || "", kindOverride: sw.kindOverride || "", fanType: sw.fanType || "", otherSpots: Number(sw.otherSpots) || 0, groupId: sw.groupId || ""
+      note: sw.note || "", kindOverride: sw.kindOverride || "", fanType: sw.fanType || "", otherSpots: Number(sw.otherSpots) || 0,
+      fixtureCount: fixtureCountOf(sw) || "", fixtureMany: fixtureCountOf(sw) > 8,
+      lightElsewhere: lightIsElsewhere(sw, home),
+      lightFloor: sw.lightFloor || "",
+      lightRoom: (sw.lightRoom && ROOMS.includes(sw.lightRoom)) ? sw.lightRoom : (sw.lightRoom ? "Other" : ""),
+      lightRoomOther: (sw.lightRoom && !ROOMS.includes(sw.lightRoom)) ? sw.lightRoom : "",
+      groupId: sw.groupId || ""
     };
     state.moreOpen = Boolean(sw.note || Number(sw.gangSize) > 1 || Number(sw.gangPosition) > 1);
     persist(); render();
