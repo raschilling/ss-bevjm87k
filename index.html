@@ -33,7 +33,8 @@
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; min-height: 100%; }
-    body { padding: calc(12px + env(safe-area-inset-top)) 14px calc(28px + env(safe-area-inset-bottom)); max-width: 430px; margin: 0 auto; }
+    body { padding: calc(12px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom)); margin: 0; }
+    #app { width: 100%; max-width: 720px; margin: 0 auto; }
     h1 { font-size: 1.45rem; margin: 0 0 4px; letter-spacing: -.02em; }
     h2 { font-size: 1.05rem; margin: 0 0 10px; }
     p, .hint { color: var(--muted); font-size: .92rem; margin: 0 0 10px; }
@@ -45,7 +46,7 @@
     .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     label.field { display: block; font-size: .78rem; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
     .field-wrap { margin: 0 0 12px; }
-    select, input[type=text], input[type=number], textarea { width: 100%; min-height: var(--tap); border: 1.5px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--ink); padding: 10px 12px; font-size: 16px; }
+    select, input[type=text], input[type=number], textarea { width: 100%; max-width: 420px; min-height: var(--tap); border: 1.5px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--ink); padding: 10px 12px; font-size: 16px; display: block; }
     textarea { min-height: 72px; resize: vertical; }
     .chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .chip { appearance: none; border: 1.5px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 999px; min-height: 44px; padding: 8px 14px; font-weight: 600; }
@@ -78,7 +79,25 @@
     .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 320px; margin: 0 auto 16px; }
     .key { appearance: none; height: 64px; border-radius: 16px; border: 1.5px solid var(--line); background: var(--paper); color: var(--ink); font-size: 1.45rem; font-weight: 650; }
     .hidden { display: none !important; }
-    .stack { display: flex; flex-direction: column; gap: 8px; }
+    .stack { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+    .stack .btn { max-width: 420px; }
+    .tabs { max-width: 520px; }
+    .keypad { width: 100%; }
+    .summary-grid, .pair-grid, .home-list { display: flex; flex-direction: column; gap: 12px; }
+    .summary-side { display: flex; flex-direction: column; }
+    table { max-width: 100%; }
+    @media (max-width: 400px) {
+      body { padding-left: max(10px, env(safe-area-inset-left)); padding-right: max(10px, env(safe-area-inset-right)); }
+      .chip { min-height: 44px; padding: 8px 12px; }
+      .key { height: 56px; }
+    }
+    @media (min-width: 700px) {
+      h1 { font-size: 1.7rem; }
+      .summary-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.95fr); gap: 12px; align-items: start; }
+      .pair-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+      .home-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .card { padding: 16px; }
+    }
   </style>
 </head>
 <body>
@@ -95,6 +114,7 @@
   const QUALIFIERS = ["Left","Right","Front","Back","Upper","Lower","1","2","3","4"];
   const LOCATIONS = ["Entry","Hall","Top of stairs","Bottom of stairs","Garage door","Back door","Bedside","Other"];
   const BRANDS = ["Undecided","Inovelli","Lutron Caseta"];
+  const FAN_TYPES = ["AC","DC","Not sure"];
   const NEUTRALS = [
     { value: "yes", label: "Most have a neutral" },
     { value: "no", label: "Most do not" },
@@ -111,7 +131,7 @@
   function uid(prefix) { return prefix + "_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
   function blankHome() { return { id: uid("home"), name: "", brand: "undecided", neutrals: "unknown", rooms: [], switches: [], isExample: false }; }
   function emptyDraft(floor, room) {
-    return { editId: "", floor: floor || "Main", room: room || "", roomOther: "", load: "", loadOther: "", qualifier: "", location: "", locationOther: "", gangSize: 1, gangPosition: 1, loggedDumb: false, note: "", kindOverride: "", groupId: "" };
+    return { editId: "", floor: floor || "Main", room: room || "", roomOther: "", load: "", loadOther: "", qualifier: "", location: "", locationOther: "", gangSize: 1, gangPosition: 1, loggedDumb: false, note: "", kindOverride: "", fanType: "", groupId: "" };
   }
   function defaultStore() { const home = blankHome(); return { version: 1, kind: "ha-switch-survey", homes: [home], activeHomeId: home.id }; }
   function homeOf() { const s = state.store; return s.homes.find((h) => h.id === s.activeHomeId) || s.homes[0]; }
@@ -129,6 +149,15 @@
     return "dimmer";
   }
   function kindLabel(k) { return k === "fan" ? "Fan" : k === "onoff" ? "On/off" : "Dimmer"; }
+  function orderHint(d, useKind) {
+    if (useKind === "fan") {
+      const ft = d.fanType === "ac" ? "ac" : d.fanType === "dc" ? "dc" : "unknown";
+      if (ft === "ac") return "orders as a Fan (AC)";
+      if (ft === "dc") return "orders as an On/off (DC fan, constant power; speed via fan remote/integration)";
+      return "verify fan type on site before ordering (AC = fan switch, DC = on/off)";
+    }
+    return "orders as a " + kindLabel(useKind || "dimmer");
+  }
   function groupKeyOf(sw) {
     const load = sw.load === "Other" ? "Other" : sw.load;
     const extra = load === "Other" ? "|" + (sw.loadOther || sw.note || "").trim() : "";
@@ -146,6 +175,26 @@
     if (sw.loggedDumb && !sw.groupId) return "dumb";
     if (sw.kindOverride) return sw.kindOverride;
     return kindForLoad(sw.load === "Other" ? (sw.loadOther || "") : sw.load);
+  }
+  function fanTypeLabel(v) { return v === "ac" ? "AC" : v === "dc" ? "DC" : "Not sure"; }
+  function fanTypeValue(label) { return label === "AC" ? "ac" : label === "DC" ? "dc" : "unknown"; }
+  function fanTypeOf(sw) { return sw.fanType === "ac" || sw.fanType === "dc" ? sw.fanType : "unknown"; }
+  function needsFanType(sw) {
+    if (sw.loggedDumb && !sw.groupId) return false;
+    return shopKind(sw) === "fan";
+  }
+  function isVerifyFan(sw) { return needsFanType(sw) && fanTypeOf(sw) === "unknown"; }
+  function isVerifyDevice(sw, home) {
+    if (isVerifyFan(sw)) return true;
+    if (sw.groupId) return home.switches.some((m) => m.groupId === sw.groupId && isVerifyFan(m));
+    return false;
+  }
+  function buyKind(sw, home) {
+    if ((!isSmart(sw) && !sw.groupId) || isVerifyDevice(sw, home)) return "";
+    if (roleOf(sw, home) === "Companion") return "companion";
+    const k = shopKind(sw);
+    if (k === "fan") return fanTypeOf(sw) === "dc" ? "onoff" : "fan";
+    return k;
   }
   function findMatches(home, rec) {
     const key = groupKeyOf(rec);
@@ -187,12 +236,29 @@
   }
   function plateName(brand, gang) { return brand === "caseta" ? "Claro " + gang + "-gang" : gang + "-gang wallplate"; }
   function summaryOf(home) {
-    const shopped = home.switches.filter((s) => isSmart(s) || s.groupId);
-    let dimmer = 0, onoff = 0, fan = 0, companion = 0, dumb = 0;
+    const shopped = home.switches.filter((s) => (isSmart(s) || s.groupId) && !isVerifyDevice(s, home));
+    let dimmer = 0, onoff = 0, fan = 0, companion = 0, dumb = 0, dcFanOnOff = 0;
+    const verifyOnSite = [];
     home.switches.forEach((s) => {
       if (!isSmart(s) && !s.groupId) { dumb++; return; }
+      if (isVerifyDevice(s, home)) {
+        if (isVerifyFan(s) || roleOf(s, home) === "Main") {
+          verifyOnSite.push({
+            name: displayName(s, roomNameOf(s, home)),
+            room: roomNameOf(s, home),
+            floor: s.floor,
+            why: "Confirm whether this fan is AC or DC before ordering. AC uses a fan switch; DC uses an on/off (constant power; speed via fan remote/integration)."
+          });
+        }
+        return;
+      }
       if (roleOf(s, home) === "Companion") companion++;
-      else { const k = shopKind(s); if (k === "fan") fan++; else if (k === "onoff") onoff++; else dimmer++; }
+      else {
+        const k = buyKind(s, home);
+        if (k === "fan") fan++;
+        else if (k === "onoff") { onoff++; if (shopKind(s) === "fan" && fanTypeOf(s) === "dc") dcFanOnOff++; }
+        else dimmer++;
+      }
     });
     const plates = { 1: 0, 2: 0, 3: 0, 4: 0 };
     const buckets = {};
@@ -222,7 +288,7 @@
         : "Most boxes do not have a neutral. Most dimmers can work without one; on/off and some fan models often need one.");
     else if (home.neutrals === "mixed") issues.push("Neutrals are mixed. Confirm boxes for on/off and fan devices, and whether Inovelli dimmers on small LED loads need a bypass.");
     if (groups.length) issues.push("Confirm traveler wiring and which box has line for " + groups.length + " multi-way group" + (groups.length === 1 ? "" : "s") + ". Put the smart main where line and, if possible, a neutral arrive.");
-    return { dimmer, onoff, fan, companion, dumb, plates, groups, issues, locations: home.switches.length };
+    return { dimmer, onoff, fan, companion, dumb, dcFanOnOff, plates, groups, issues, verifyOnSite, locations: home.switches.length };
   }
   function orderRows(home) {
     const brand = home.brand, s = summaryOf(home), rows = [];
@@ -236,20 +302,27 @@
     add("Smart fan", s.fan, "fan");
     add("Companion", s.companion, "companion");
     [1,2,3,4].forEach((g) => add(g + "-gang wallplate", s.plates[g], "plate"));
-    return { s, rows };
+    const notes = [];
+    if (s.dcFanOnOff) notes.push((s.dcFanOnOff === s.onoff ? "These on/off switches" : (s.dcFanOnOff + " of these on/off switches")) + " are for DC fans (constant power). Speed via fan remote/integration.");
+    return { s, rows, notes };
   }
   function csvEscape(v) { const t = String(v ?? ""); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }
   function orderCsv(home) {
-    const { s, rows } = orderRows(home);
+    const { s, rows, notes } = orderRows(home);
     const lines = [csvEscape("Switch Survey — " + (home.name || "Untitled home")),
       ["Brand", home.brand === "caseta" ? "Lutron Caseta" : home.brand === "inovelli" ? "Inovelli" : "Undecided"].map(csvEscape).join(","),
       ["Locations", String(s.locations)].map(csvEscape).join(","), "", "SHOPPING LIST", "Item,Qty,Part"];
     rows.forEach((r) => lines.push([r.item, r.qty, r.part].map(csvEscape).join(",")));
     if (!rows.length) lines.push("None yet,0,");
+    if (notes.length) { lines.push("", "SHOPPING NOTES"); notes.forEach((n) => lines.push(csvEscape(n))); }
+    if (s.verifyOnSite && s.verifyOnSite.length) {
+      lines.push("", "VERIFY ON SITE", "Floor,Room,Name,Why");
+      s.verifyOnSite.forEach((v) => lines.push([v.floor, v.room, v.name, v.why].map(csvEscape).join(",")));
+    }
     lines.push("", "BY FLOOR / ROOM", "Floor,Room,Name,Plan,Gang,Location,Note");
     (home.rooms || []).forEach((room) => {
       home.switches.filter((sw) => sw.roomId === room.id).forEach((sw) => {
-        const plan = sw.groupId ? wayLabel(home.switches.filter((x) => x.groupId === sw.groupId).length) + " " + roleOf(sw, home) : (sw.loggedDumb ? "Dumb" : "Smart " + kindLabel(shopKind(sw)));
+        const plan = sw.groupId ? wayLabel(home.switches.filter((x) => x.groupId === sw.groupId).length) + " " + roleOf(sw, home) : (sw.loggedDumb ? "Dumb" : needsFanType(sw) ? (fanTypeOf(sw) === "ac" ? "Smart Fan (AC)" : fanTypeOf(sw) === "dc" ? "Smart On/off (DC fan, constant power)" : "Verify on site (fan type)") : "Smart " + kindLabel(shopKind(sw)));
         lines.push([room.floor, room.name, displayName(sw, room.name), plan, sw.gangSize + " pos " + sw.gangPosition, locLabel(sw), sw.note || ""].map(csvEscape).join(","));
       });
     });
@@ -327,7 +400,7 @@
         locationOther: location === "Other" ? (note || "") : "",
         gangSize: gang, gangPosition: pos, loggedDumb: smart === "Dumb",
         note: (load === "Other" || room === "Other" || note === "Inside garage") ? note : (note || ""),
-        kindOverride: "", groupId: "", switchType: "single", groupPosition: 1
+        kindOverride: "", fanType: (load === "Ceiling fan" || load === "Fan + light") ? "ac" : "", groupId: "", switchType: "single", groupPosition: 1
       };
     });
     EXAMPLE_GROUPS.forEach((g, gi) => {
@@ -493,12 +566,15 @@
         <h2>${d.editId ? (d.loggedDumb ? "Upgrade dumb switch" : "Edit switch") : "Add a switch"}</h2>
         <p class="hint">Pick floor, room, and load, then gang size, and save. Reuse the same load at the other end of a 3-way. Floor and room stay put after you save.</p>
         <div class="field-wrap"><label class="field">Floor</label>${chipRow("floor", FLOORS, d.floor)}</div>
+        <div class="pair-grid">
         ${selectField("Room", "room", ROOMS, d.room)}
-        ${d.room==="Other" ? `<div class="field-wrap"><label class="field">Room name</label><input type="text" data-field="roomOther" value="${esc(d.roomOther)}" placeholder="Mudroom"></div>` : ""}
         ${selectField("Load", "load", LOADS, d.load)}
+        </div>
+        ${d.room==="Other" ? `<div class="field-wrap"><label class="field">Room name</label><input type="text" data-field="roomOther" value="${esc(d.roomOther)}" placeholder="Mudroom"></div>` : ""}
         ${d.load==="Other" ? `<div class="field-wrap"><label class="field">Load name</label><input type="text" data-field="loadOther" value="${esc(d.loadOther)}" placeholder="Stair lights"></div>` : ""}
         <div class="field-wrap"><label class="field">Qualifier, optional</label>${chipRow("qualifier", QUALIFIERS, d.qualifier)}</div>
-        ${d.load ? `<div class="auto">${esc(preview)} · orders as a ${esc(kindLabel(useKind || "dimmer"))}.</div>` : ""}
+        ${useKind === "fan" && !d.loggedDumb ? `<div class="field-wrap"><label class="field">Fan type</label>${chipRow("fanType", FAN_TYPES, fanTypeLabel(d.fanType))}<p class="hint">AC uses a fan switch. DC uses an on/off (constant power); speed via fan remote/integration. Not sure is listed under Verify on site and stays off the order until you choose.</p></div>` : ""}
+        ${d.load ? `<div class="auto">${esc(preview)} · ${esc(orderHint(d, useKind))}.</div>` : ""}
         ${showLoc ? `<div class="field-wrap"><label class="field">Paddle location, for this multi-way</label>${chipRow("location", LOCATIONS, d.location)}</div>` : ""}
         ${showLoc && d.location==="Other" ? `<div class="field-wrap"><label class="field">Custom location</label><input type="text" data-field="locationOther" value="${esc(d.locationOther)}" placeholder="Landing"></div>` : ""}
         <div class="field-wrap"><label class="field">Switches in this box</label>${chipRow("gangSize", ["1","2","3","4"], String(d.gangSize))}</div>
@@ -560,24 +636,30 @@
     const box = document.createElement("div"); box.innerHTML = html; return box;
   }
   function renderSummary(home) {
-    const { s, rows } = orderRows(home);
+    const { s, rows, notes } = orderRows(home);
     const brandVal = home.brand === "caseta" ? "Lutron Caseta" : home.brand === "inovelli" ? "Inovelli" : "Undecided";
     const frag = document.createElement("div");
     frag.innerHTML = `
       <div class="card"><label class="field">Home name</label><input type="text" id="homeName" placeholder="Name this house" value="${esc(home.name)}" autocomplete="off">
         <div class="field-wrap" style="margin-top:12px"><label class="field">Brand</label>${chipRow("brand", BRANDS, brandVal)}</div>
         <p class="hint">Walk stays brand-neutral. Pick a brand when you are ready to order.</p></div>
+      <div class="summary-grid">
       <div class="card"><h2>Order list</h2>
         <table><thead><tr><th>Item</th><th>Qty</th><th>Part</th></tr></thead>
         <tbody>${rows.length ? rows.map((r)=>`<tr><td>${esc(r.item)}</td><td>${r.qty}</td><td>${esc(r.part)}</td></tr>`).join("") : "<tr><td colspan=3>None yet</td></tr>"}</tbody></table>
+        ${notes && notes.length ? notes.map((n)=>`<p class="hint">${esc(n)}</p>`).join("") : ""}
         <p class="hint">${s.dumb} dumb switch${s.dumb===1?"":"es"} (not ordered). ${s.locations} location${s.locations===1?"":"s"} logged.</p></div>
+      <div class="summary-side">
+      ${s.verifyOnSite && s.verifyOnSite.length ? `<div class="card"><h2>Verify on site</h2>${s.verifyOnSite.map((v)=>`<p><strong>${esc(v.name)}</strong><br><span class="sub">${esc(v.floor)} ${esc(v.room)} · ${esc(v.why)}</span></p>`).join("")}</div>` : ""}
       ${s.groups.length ? `<div class="card"><h2>Multi-way groups</h2>${s.groups.map((g)=>`<p><strong>${esc(g.name)}</strong> · ${esc(g.way)}<br><span class="sub">${esc(g.locs)}</span></p>`).join("")}<p class="hint">Role is a starting guess. The electrician confirms which box is the line/main at install.</p></div>` : ""}
       ${s.issues.length ? `<div class="card"><h2>Open issues</h2>${s.issues.map((i)=>`<p>${esc(i)}</p>`).join("")}</div>` : ""}
       <div class="card"><h2>Export this home</h2><div class="stack">
         <button type="button" class="btn primary" id="exportJson">Export JSON backup</button>
         <button type="button" class="btn" id="exportCsv">Export CSV order sheet</button>
         <button type="button" class="btn" id="shareBtn">Copy / Share</button>
-      </div></div>`;
+      </div></div>
+      </div>
+      </div>`;
     return frag;
   }
   function renderHomes(home) {
@@ -585,7 +667,7 @@
     frag.innerHTML = `
       <div class="card"><h2>Homes</h2>
         <p class="hint">Each home is a separate survey, saved only on this phone. Exports are per home unless you export all JSON.</p>
-        <div class="stack">${state.store.homes.map((h) => `<button type="button" class="list-item" data-select-home="${h.id}"><strong>${esc(h.name || "Untitled home")}${h.isExample?" (example)":""}</strong><span>${h.switches.length} location${h.switches.length===1?"":"s"}</span></button>`).join("")}</div>
+        <div class="home-list">${state.store.homes.map((h) => `<button type="button" class="list-item" data-select-home="${h.id}"><strong>${esc(h.name || "Untitled home")}${h.isExample?" (example)":""}</strong><span>${h.switches.length} location${h.switches.length===1?"":"s"}</span></button>`).join("")}</div>
       </div>
       <div class="card"><label class="field">New home name</label><input type="text" id="newHomeName" placeholder="Another house" autocomplete="off">
         <div class="stack" style="margin-top:10px">
@@ -695,6 +777,7 @@
     if (field === "qualifier" && state.draft.qualifier === value) state.draft.qualifier = "";
     else if (field === "location" && state.draft.location === value) state.draft.location = "";
     else if (field === "kindOverride") state.draft.kindOverride = value;
+    else if (field === "fanType") state.draft.fanType = fanTypeValue(value);
     else if (field === "gangSize") { state.draft.gangSize = Number(value); if (state.draft.gangPosition > state.draft.gangSize) state.draft.gangPosition = 1; }
     else if (field === "gangPosition") state.draft.gangPosition = Number(value);
     else state.draft[field] = value;
@@ -714,6 +797,7 @@
       qualifier: d.qualifier, location: effectiveLocation(d), locationOther: d.location === "Other" ? (d.locationOther || "").trim() : "",
       gangSize: Number(d.gangSize) || 1, gangPosition: Number(d.gangPosition) || 1,
       loggedDumb: asDumb, note: d.note || "", kindOverride: d.kindOverride || "",
+      fanType: d.fanType || "",
       groupId: d.groupId || "", switchType: "single", groupPosition: 1
     };
   }
@@ -784,7 +868,7 @@
       qualifier: sw.qualifier || "", location: LOCATIONS.includes(sw.location) ? sw.location : (sw.location ? "Other" : ""),
       locationOther: LOCATIONS.includes(sw.location) ? "" : (locLabel(sw)),
       gangSize: sw.gangSize, gangPosition: sw.gangPosition, loggedDumb: sw.loggedDumb,
-      note: sw.note || "", kindOverride: sw.kindOverride || "", groupId: sw.groupId || ""
+      note: sw.note || "", kindOverride: sw.kindOverride || "", fanType: sw.fanType || "", groupId: sw.groupId || ""
     };
     state.moreOpen = Boolean(sw.note || sw.kindOverride);
     persist(); render();
