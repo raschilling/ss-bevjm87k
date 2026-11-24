@@ -1,0 +1,252 @@
+import asyncio, json, os, sys
+from pathlib import Path
+from playwright.async_api import async_playwright
+
+BASE = os.environ.get("SS_BASE", "http://127.0.0.1:8768/index.html")
+OUT = Path(os.environ.get("SS_OUT", "/workspace/switch-survey/verify/ways"))
+OUT.mkdir(parents=True, exist_ok=True)
+PIN = os.environ.get("SS_TEST_PIN", "2468")
+WEBKIT = "/home/box/.cache/ms-playwright/webkit-2388/pw_run.sh"
+results = {"ok": True, "base": BASE, "checks": []}
+
+def check(name, cond, detail=""):
+    results["checks"].append({"name": name, "ok": bool(cond), "detail": str(detail)})
+    print(("PASS " if cond else "FAIL ") + name + (f" — {detail}" if detail else ""))
+    if not cond:
+        results["ok"] = False
+
+async def press_pin(page, pin, confirm=False):
+    for d in pin:
+        await page.click(f'.key[data-key="{d}"]')
+    await page.click('.key[data-key="OK"]')
+    if confirm:
+        await page.wait_for_timeout(80)
+        for d in pin:
+            await page.click(f'.key[data-key="{d}"]')
+        await page.click('.key[data-key="OK"]')
+
+async def unlock(page, pin):
+    await page.wait_for_selector("#keypad")
+    for d in pin:
+        await page.click(f'.key[data-key="{d}"]')
+    if await page.locator("#keypad").count():
+        await page.click('.key[data-key="OK"]')
+    await page.wait_for_timeout(120)
+
+async def shot(page, name):
+    path = OUT / name
+    await page.screenshot(path=str(path), full_page=True)
+    return str(path)
+
+def parse_qty(rows):
+    return {r[0]: int(r[1]) for r in rows if len(r) >= 2 and str(r[1]).isdigit()}
+
+async def qty_on(page):
+    rows = await page.eval_on_selector_all("table tbody tr", "els => els.map(tr => [...tr.children].map(td => td.innerText.trim()))")
+    return parse_qty(rows)
+
+async def goto_walk_new_home(page, name):
+    await page.click("[data-tab='homes']")
+    await page.fill("#newHomeName", name)
+    await page.click("text=Add home")
+    await page.wait_for_timeout(150)
+    await page.click("[data-tab='walk']")
+    await page.wait_for_timeout(100)
+
+async def pick_room_load(page, room, load):
+    await page.select_option("select[data-field='room']", room)
+    await page.select_option("select[data-field='load']", load)
+    await page.wait_for_timeout(80)
+
+async def run():
+    async with async_playwright() as p:
+        browser = await p.webkit.launch(executable_path=WEBKIT)
+        ctx = await browser.new_context(viewport={"width": 393, "height": 852}, color_scheme="dark", device_scale_factor=2)
+        page = await ctx.new_page()
+        await page.goto(BASE, wait_until="load")
+        await page.wait_for_selector("h1")
+        body = await page.inner_text("body")
+        src = await page.content()
+        check("title", await page.title() == "Switch Survey")
+        check("no Qualifier label", "Qualifier" not in body)
+        await press_pin(page, PIN, confirm=True)
+        await page.wait_for_selector("[data-tab='walk']")
+        body = await page.inner_text("body")
+        check("Which one? is not on the form", "Which one?" not in body)
+        check("Also controlled from chips", "Also controlled from" in body and "1 other spot (3-way)" in body and "2 other spots (4-way)" in body)
+        await shot(page, "393-dark-walk-labels.png")
+
+        # Example totals still include 5 companions from linked-only stairs/etc.
+        await page.click("[data-tab='homes']")
+        await page.click("text=Load example house")
+        await page.wait_for_timeout(200)
+        await page.click("[data-tab='summary']")
+        await page.wait_for_timeout(200)
+        q = await qty_on(page)
+        check("example 23/6/1/5", q.get("Smart dimmer")==23 and q.get("Smart on/off")==6 and q.get("Smart fan")==1 and q.get("Companion")==5, q)
+        body = await page.inner_text("body")
+        check("example 4-way badge (3 locations)", "4-way (3 locations)" in body)
+        check("example 3-way badge (2 locations)", "3-way (2 locations)" in body)
+        check("summary 4-way math hint", "1 smart switch + 2 companions" in body)
+        await shot(page, "393-dark-example-summary.png")
+        # walk list badges
+        await page.click("[data-tab='walk']")
+        await page.wait_for_timeout(100)
+        body = await page.inner_text("body")
+        check("walk list 4-way badge", "4-way (3 locations)" in body)
+        await shot(page, "393-dark-example-walk.png")
+
+        # Declared-only
+        await goto_walk_new_home(page, "Declared only")
+        await pick_room_load(page, "Kitchen", "Can lights")
+        await page.click('[data-field="otherSpots"] .chip[data-value="1 other spot (3-way)"]')
+        await page.click("#saveSw")
+        await page.wait_for_timeout(200)
+        body = await page.inner_text("body")
+        check("declared-only walk badge", "3-way (2 locations)" in body)
+        await page.click("[data-tab='summary']")
+        await page.wait_for_timeout(200)
+        q = await qty_on(page)
+        check("declared-only 1 dimmer + 1 companion", q.get("Smart dimmer")==1 and q.get("Companion")==1 and "Smart fan" not in q, q)
+        body = await page.inner_text("body")
+        check("declared-only summary badge", "3-way (2 locations)" in body)
+        await shot(page, "393-dark-declared-only.png")
+        async with page.expect_download() as dl:
+            await page.click("#exportCsv")
+        csvp = OUT / "declared-only.csv"
+        await (await dl.value).save_as(str(csvp))
+        csv = csvp.read_text(encoding="utf-8")
+        check("csv Tag header", "Name,Tag,Fixtures" in csv)
+        check("csv Also controlled from", "Also controlled from" in csv and "1 other spot (3-way)" in csv)
+        check("csv no Qualifier header", "Qualifier" not in csv)
+
+        # Linked-only (3-way)
+        await goto_walk_new_home(page, "Linked only")
+        await pick_room_load(page, "Kitchen", "Can lights")
+        await page.click("#saveSw")
+        await page.wait_for_timeout(200)
+        await pick_room_load(page, "Hall", "Can lights")
+        await page.click("#saveSw")
+        await page.wait_for_timeout(200)
+        body = await page.inner_text("body")
+        check("linked prompt says 3-way", "This makes it a 3-way" in body and "Same light as" in body)
+        await shot(page, "393-dark-link-prompt-3way.png")
+        await page.click('[data-field="location"] .chip[data-value="Hall"]')
+        await page.click("#linkYes")
+        await page.wait_for_timeout(200)
+        body = await page.inner_text("body")
+        check("linked-only walk 3-way badge", "3-way (2 locations)" in body or "Linked as a 3-way" in body)
+        await page.click("[data-tab='summary']")
+        await page.wait_for_timeout(200)
+        q = await qty_on(page)
+        check("linked-only 1 dimmer + 1 companion", q.get("Smart dimmer")==1 and q.get("Companion")==1, q)
+        await shot(page, "393-dark-linked-only.png")
+
+        # Both: declare 1 other, then link the second — still 1 companion
+        await goto_walk_new_home(page, "Both declare and link")
+        await pick_room_load(page, "Kitchen", "Can lights")
+        await page.click('[data-field="otherSpots"] .chip[data-value="1 other spot (3-way)"]')
+        await page.click("#saveSw")
+        await page.wait_for_timeout(200)
+        await pick_room_load(page, "Hall", "Can lights")
+        await page.click("#saveSw")
+        await page.wait_for_timeout(200)
+        body = await page.inner_text("body")
+        check("both-path prompt is 3-way", "This makes it a 3-way" in body)
+        await page.click('[data-field="location"] .chip[data-value="Hall"]')
+        await page.click("#linkYes")
+        await page.wait_for_timeout(200)
+        await page.click("[data-tab='summary']")
+        await page.wait_for_timeout(200)
+        q = await qty_on(page)
+        check("both-path no double count (1+1)", q.get("Smart dimmer")==1 and q.get("Companion")==1, q)
+        await shot(page, "393-dark-both-no-double.png")
+
+        # 4-way: 3 linked locations = 1 smart + 2 companions
+        await goto_walk_new_home(page, "Four way linked")
+        await pick_room_load(page, "Kitchen", "Can lights")
+        await page.click("#saveSw")
+        await page.wait_for_timeout(150)
+        await pick_room_load(page, "Hall", "Can lights")
+        await page.click("#saveSw")
+        await page.wait_for_timeout(150)
+        await page.click('[data-field="location"] .chip[data-value="Hall"]')
+        await page.click("#linkYes")
+        await page.wait_for_timeout(150)
+        await pick_room_load(page, "Foyer", "Can lights")
+        await page.click("#saveSw")
+        await page.wait_for_timeout(200)
+        body = await page.inner_text("body")
+        check("third link prompt says 4-way", "This makes it a 4-way" in body)
+        await shot(page, "393-dark-link-prompt-4way.png")
+        await page.click('[data-field="location"] .chip[data-value="Entry"]')
+        await page.click("#linkYes")
+        await page.wait_for_timeout(200)
+        await page.click("[data-tab='summary']")
+        await page.wait_for_timeout(200)
+        q = await qty_on(page)
+        check("4-way linked 1 dimmer + 2 companions", q.get("Smart dimmer")==1 and q.get("Companion")==2, q)
+        body = await page.inner_text("body")
+        check("4-way badge 3 locations", "4-way (3 locations)" in body)
+        await shot(page, "393-dark-four-way-linked.png")
+
+        # Declared 4-way only
+        await goto_walk_new_home(page, "Declared four way")
+        await pick_room_load(page, "Kitchen", "Can lights")
+        await page.click('[data-field="otherSpots"] .chip[data-value="2 other spots (4-way)"]')
+        await page.click("#saveSw")
+        await page.wait_for_timeout(200)
+        await page.click("[data-tab='summary']")
+        await page.wait_for_timeout(200)
+        q = await qty_on(page)
+        check("declared 4-way 1 dimmer + 2 companions", q.get("Smart dimmer")==1 and q.get("Companion")==2, q)
+        check("declared 4-way badge", "4-way (3 locations)" in (await page.inner_text("body")))
+        await shot(page, "393-dark-declared-four-way.png")
+
+        # Light + widths
+        await page.emulate_media(color_scheme="light")
+        await page.set_viewport_size({"width": 393, "height": 852})
+        await page.wait_for_timeout(80)
+        bg = await page.eval_on_selector("body", "el => getComputedStyle(el).backgroundColor")
+        check("light bg", bg.replace(" ","") == "rgb(243,241,234)", bg)
+        await shot(page, "393-light-summary.png")
+        await page.click("[data-tab='walk']")
+        await page.wait_for_timeout(80)
+        check("light Which one? still absent", "Which one?" not in (await page.inner_text("body")))
+        await shot(page, "393-light-walk.png")
+        for w,h,label in ((840,820,"840-unfolded"), (1440,900,"1440-desktop")):
+            await page.set_viewport_size({"width": w, "height": h})
+            await page.wait_for_timeout(80)
+            await page.click("[data-tab='summary']")
+            ov = await page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1")
+            check(f"{label} light no overflow", ov)
+            await shot(page, f"{label}-light-summary.png")
+            await page.click("[data-tab='walk']")
+            await shot(page, f"{label}-light-walk.png")
+        await page.emulate_media(color_scheme="dark")
+        for w,h,label in ((840,820,"840-unfolded"), (1440,900,"1440-desktop")):
+            await page.set_viewport_size({"width": w, "height": h})
+            await page.wait_for_timeout(80)
+            await page.click("[data-tab='summary']")
+            ov = await page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1")
+            check(f"{label} dark no overflow", ov)
+            await shot(page, f"{label}-dark-summary.png")
+
+        # clear
+        await page.reload(wait_until="load")
+        await page.wait_for_selector("#forgot")
+        await page.click("#forgot")
+        await page.click("#forgotWarn")
+        await page.click("#forgotConfirm")
+        await page.wait_for_timeout(150)
+        has = await page.evaluate("() => localStorage.getItem('switchSurvey.meta.v1')")
+        check("storage cleared", has is None, has)
+        await ctx.close()
+        await browser.close()
+
+    (OUT / "results.json").write_text(json.dumps(results, indent=2))
+    failed = [c for c in results["checks"] if not c["ok"]]
+    print("\nSUMMARY", "PASS" if results["ok"] else f"FAIL {len(failed)}", "of", len(results["checks"]))
+    sys.exit(0 if results["ok"] else 1)
+
+asyncio.run(run())
