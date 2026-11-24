@@ -57,6 +57,18 @@ async def open_more(page):
         await page.click("#moreToggle")
         await page.wait_for_timeout(80)
 
+async def open_hint(page, hint_id):
+    btn = page.locator(f'[data-toggle-hint="{hint_id}"]')
+    if await btn.count() and (await btn.get_attribute("aria-expanded")) != "true":
+        await btn.click()
+        await page.wait_for_timeout(60)
+
+async def open_fixture(page):
+    if await page.locator("#fixtureOpen").count():
+        await page.click("#fixtureOpen")
+        await page.wait_for_timeout(60)
+
+
 async def pick_existing_light(page, contains):
     await page.wait_for_selector("[data-pick-light]")
     chips = page.locator("[data-pick-light]")
@@ -91,7 +103,9 @@ async def run():
         # Walk top: no neutrals card, no Also controlled from until More
         body = await page.inner_text("body")
         check("walk has no Neutrals card", "Neutrals in this house" not in body and "Most have a neutral" not in body, body[:500])
-        check("walk intro is walk-every-switch", "Walk every switch in order" in body)
+        await open_hint(page, "addSwitch")
+        body = await page.inner_text("body")
+        check("survey intro is survey-every-switch", "Survey every switch in order" in body)
         check("Also controlled from not on main walk", "Also controlled from" not in body)
         check("Where the switch is", "Where the switch is" in body)
         check("Switch type on main form", "Switch type" in body and "Dimmer" in body)
@@ -118,6 +132,8 @@ async def run():
         body = await page.inner_text("body")
         check("no unknown neutrals nag", "House neutrals have not been spot-checked" not in body)
         check("summary Older house? Change", "Older house without neutrals? Change" in body)
+        await open_hint(page, "neutralsYes")
+        body = await page.inner_text("body")
         check("soft yes note", "Assumes boxes have a neutral" in body and "1980s" in body)
         await shot(page, "393-dark-summary.png")
 
@@ -137,6 +153,8 @@ async def run():
         await page.click("[data-tab='summary']")
         await page.wait_for_timeout(150)
         body = await page.inner_text("body")
+        await open_hint(page, "neutralsYes")
+        body = await page.inner_text("body")
         check("new home soft yes note", "Assumes boxes have a neutral" in body)
         check("new home no neutrals nag", "House neutrals have not been spot-checked" not in body and "Most boxes do not have a neutral" not in body)
 
@@ -144,7 +162,10 @@ async def run():
         await page.click("[data-tab='walk']")
         await pick_room_load(page, "Hall", "Can lights")
         body = await page.inner_text("body")
-        check("How many? for can lights", "How many?" in body)
+        check("fixture count collapsed until tapped", await page.locator("#fixtureOpen").count() > 0 and "Fixtures on this switch" not in body)
+        await open_fixture(page)
+        body = await page.inner_text("body")
+        check("Fixtures on this switch after tap", "Fixtures on this switch" in body)
         await page.click('[data-field="fixtureCount"] .chip[data-value="6"]')
         await page.wait_for_timeout(80)
         check("preview Hall cans x6", "Hall cans x6" in (await page.inner_text("body")))
@@ -152,7 +173,7 @@ async def run():
         await page.wait_for_timeout(200)
         body = await page.inner_text("body")
         check("walk list Hall cans x6", "Hall cans x6" in body)
-        check("walk list logged order heading", "Logged switches" in body)
+        check("survey order heading", "Survey order" in body)
 
         # Different rooms, same load: no auto-link
         await goto_walk_new_home(page, "Different lights")
@@ -249,7 +270,7 @@ async def run():
         await pick_room_load(page, "Bedroom", "Ceiling fan")
         body = await page.inner_text("body")
         check("Fan type shows for ceiling fan", "Fan type" in body)
-        check("How many hidden for fan", "How many?" not in body)
+        check("fixture count hidden for fan", await page.locator("#fixtureOpen").count() == 0 and "Fixtures on this switch" not in (await page.inner_text("body")))
 
         # Autosave + PIN once
         await page.click("#saveSw")

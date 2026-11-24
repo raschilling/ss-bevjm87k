@@ -57,6 +57,18 @@ async def open_more(page):
         await page.click("#moreToggle")
         await page.wait_for_timeout(80)
 
+async def open_hint(page, hint_id):
+    btn = page.locator(f'[data-toggle-hint="{hint_id}"]')
+    if await btn.count() and (await btn.get_attribute("aria-expanded")) != "true":
+        await btn.click()
+        await page.wait_for_timeout(60)
+
+async def open_fixture(page):
+    if await page.locator("#fixtureOpen").count():
+        await page.click("#fixtureOpen")
+        await page.wait_for_timeout(60)
+
+
 async def pick_existing_light(page, contains):
     await page.wait_for_selector("[data-pick-light]")
     chips = page.locator("[data-pick-light]")
@@ -89,10 +101,12 @@ async def run():
         await page.wait_for_selector("[data-tab='walk']")
         body = await page.inner_text("body")
         check("Where the switch is", "Where the switch is" in body)
+        await open_hint(page, "floor")
+        body = await page.inner_text("body")
         check("switch location hint", "where this switch is" in body.lower())
         check("light question off main walk", "Is the light in this room?" not in body and "Light is in a different room" not in body and "Where is the light?" not in body)
         check("Switch type on main form", "Switch type" in body and "Dimmer" in body)
-        check("How many hidden until multi load", "How many?" not in body)
+        check("fixture count hidden until multi load", await page.locator("#fixtureOpen").count() == 0 and "Fixtures on this switch" not in body)
         await shot(page, "393-dark-walk-start.png")
 
         # Example house totals unchanged
@@ -109,8 +123,11 @@ async def run():
         await goto_walk_new_home(page, "Fixture hall")
         await pick_room_load(page, "Hall", "Can lights")
         body = await page.inner_text("body")
-        check("How many? shows for can lights", "How many?" in body)
-        check("How many chips 1-8 and 8+", all(x in body for x in ["1","2","6","8","8+"]))
+        check("fixture count collapsed until tapped", await page.locator("#fixtureOpen").count() > 0 and "Fixtures on this switch" not in body)
+        await open_fixture(page)
+        body = await page.inner_text("body")
+        check("Fixtures on this switch after tap", "Fixtures on this switch" in body)
+        check("fixture chips 1-8 and 8+", all(x in body for x in ["1","2","6","8","8+"]))
         await page.click('[data-field="fixtureCount"] .chip[data-value="6"]')
         await page.wait_for_timeout(80)
         body = await page.inner_text("body")
@@ -139,7 +156,7 @@ async def run():
         await page.click("[data-tab='walk']")
         await pick_room_load(page, "Bedroom", "Ceiling fan")
         body = await page.inner_text("body")
-        check("How many? hidden for ceiling fan", "How many?" not in body)
+        check("fixture count hidden for ceiling fan", await page.locator("#fixtureOpen").count() == 0 and "Fixtures on this switch" not in (await page.inner_text("body")))
         check("Fan type shows when Fan selected", "Fan type" in body)
 
         # Kitchen cans vs Hall cans should NOT auto-link
