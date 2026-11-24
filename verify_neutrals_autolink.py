@@ -189,7 +189,7 @@ async def run():
         await page.wait_for_timeout(250)
         body = await page.inner_text("body")
         check("auto 3-way no mid-walk prompt", "This makes it a" not in body and await page.locator("#linkYes").count() == 0)
-        check("auto 3-way flash or badge", "Linked as a 3-way" in body or "3-way (2 locations)" in body, body[-400:])
+        check("auto 3-way flash or badge", "Linked as a 3-way" in body or "3-way 1/2" in body or "3-way (2 locations)" in body, body[-400:])
         check("walk list keeps log order", "1." in body and "2." in body and body.find("Kitchen") < body.find("Stairs switch") or body.find("1.") < body.find("2."))
         # logged order: first item kitchen, second stairs
         # Look at numbered labels
@@ -238,7 +238,7 @@ async def run():
         await page.click("#saveSw")
         await page.wait_for_timeout(200)
         body = await page.inner_text("body")
-        check("second save auto-links without prompt", "This makes it a 3-way" not in body and ("Linked as a 3-way" in body or "3-way (2 locations)" in body))
+        check("second save auto-links without prompt", "This makes it a 3-way" not in body and ("Linked as a 3-way" in body or "3-way 1/2" in body or "3-way (2 locations)" in body))
         await pick_room_load(page, "Foyer", "Can lights")
         await pick_existing_light(page, "Main Kitchen cans")
         await page.click("#saveSw")
@@ -250,7 +250,11 @@ async def run():
         await page.wait_for_timeout(200)
         q = await qty_on(page)
         check("auto 4-way 1 dimmer + 2 companions", q.get("Smart dimmer")==1 and q.get("Companion")==2, q)
-        check("4-way badge 3 locations", "4-way (3 locations)" in (await page.inner_text("body")))
+        check("4-way summary badge 3 locations", "4-way (3 locations)" in (await page.inner_text("body")))
+        await page.click("[data-tab='walk']")
+        await page.wait_for_timeout(100)
+        wbody = await page.inner_text("body")
+        check("4-way walk position badges", "4-way 1/3" in wbody and "4-way 2/3" in wbody and "4-way 3/3" in wbody)
 
         # Fan type still on form
         await page.click("[data-tab='walk']")
