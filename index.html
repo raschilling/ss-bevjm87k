@@ -776,16 +776,16 @@
       <div class="card"><label class="field">Home name</label><input type="text" id="homeName" placeholder="Name this house" value="${esc(home.name)}" autocomplete="off"></div>
       <div class="card">
         <h2>${d.editId ? (d.loggedDumb ? "Change a regular switch" : "Edit switch") : "Add a switch"}</h2>
-        <p class="hint">Walk every switch in order. Floor and room stay put after you save. Switches that control the same light are grouped automatically as a 3-way or 4-way. If the light is in another room, tap Light is somewhere else. If this room has two of the same kind, use Which one?</p>
-        <div class="field-wrap"><label class="field">Where the switch is</label>${chipRow("floor", FLOORS, d.floor)}<p class="hint">Floor and room are where this switch is, not necessarily where the light is.</p></div>
+        <p class="hint">Walk every switch in order. Floor and room stay put after you save. Switches that control the same light are grouped automatically as a 3-way or 4-way. If the light is not in this room, answer No under Is the light in this room? If this room has two of the same kind, use Which one?</p>
+        <div class="field-wrap"><label class="field">Where the switch is</label>${chipRow("floor", FLOORS, d.floor)}<p class="hint">Floor and room are where this switch is.</p></div>
         <div class="pair-grid">
         ${selectField("Room", "room", ROOMS, d.room)}
         ${selectField("Load", "load", LOADS, d.load)}
         </div>
         ${d.room==="Other" ? `<div class="field-wrap"><label class="field">Room name</label><input type="text" data-field="roomOther" value="${esc(d.roomOther)}" placeholder="Mudroom"></div>` : ""}
         ${d.load==="Other" ? `<div class="field-wrap"><label class="field">Load name</label><input type="text" data-field="loadOther" value="${esc(d.loadOther)}" placeholder="Stair lights"></div>` : ""}
-        ${!d.loggedDumb ? `<div class="field-wrap"><button type="button" class="chip" id="lightElse" aria-pressed="${d.lightElsewhere ? "true" : "false"}">Light is somewhere else</button><p class="hint">Tap only if the light is in a different floor or room than this switch. The same light is grouped automatically, even across rooms.</p></div>` : ""}
-        ${!d.loggedDumb && d.lightElsewhere ? `<div class="field-wrap"><label class="field">Light floor</label>${chipRow("lightFloor", FLOORS, d.lightFloor || d.floor)}</div><div class="field-wrap">${selectField("Light room", "lightRoom", ROOMS, d.lightRoom || d.room)}</div>${(d.lightRoom || d.room)==="Other" ? `<div class="field-wrap"><label class="field">Light room name</label><input type="text" data-field="lightRoomOther" value="${esc(d.lightRoomOther)}" placeholder="Stairwell"></div>` : ""}` : ""}
+        ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Is the light in this room?</label>${chipRow("lightInRoom", ["Yes","No"], d.lightElsewhere ? "No" : "Yes")}<p class="hint">Yes means the light is here with the switch. Most are — you can leave this as Yes. Tap No only if the light is in a different floor or room.</p></div>` : ""}
+        ${!d.loggedDumb && d.lightElsewhere ? `<div class="field-wrap"><label class="field">Where is the light?</label>${chipRow("lightFloor", FLOORS, d.lightFloor || d.floor)}</div><div class="field-wrap">${selectField("Light room", "lightRoom", ROOMS, d.lightRoom || d.room)}</div>${(d.lightRoom || d.room)==="Other" ? `<div class="field-wrap"><label class="field">Light room name</label><input type="text" data-field="lightRoomOther" value="${esc(d.lightRoomOther)}" placeholder="Stairwell"></div>` : ""}` : ""}
         ${isMultiFixture(d.load) ? `<div class="field-wrap"><label class="field">How many?</label>${chipRow("fixtureCount", ["1","2","3","4","5","6","7","8","8+"], (d.fixtureMany || Number(d.fixtureCount) > 8) ? "8+" : (d.fixtureCount ? String(d.fixtureCount) : ""))}${(d.fixtureMany || Number(d.fixtureCount) > 8) ? `<input type="number" data-field="fixtureCount" inputmode="numeric" min="9" step="1" value="${esc(String(d.fixtureCount || ""))}" placeholder="9 or more">` : ""}<p class="hint">Optional. How many lights this switch controls, e.g. 6 cans in a hall.</p></div>` : ""}
         <div class="field-wrap"><label class="field">Which one? (only if this room has two)</label>${chipRow("qualifier", QUALIFIERS, d.qualifier)}<p class="hint">Skip unless the room has two switches for the same kind of light, e.g. Left/Right recessed.</p></div>
         ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Switch type</label>${chipRow("kindOverride", ["Dimmer","On/off","Fan"], kindChipLabel(useKind || "dimmer"))}<p class="hint">Filled in from what the switch controls. Tap once to change.</p></div>` : ""}
@@ -1066,15 +1066,6 @@
         persist(); render();
       });
     });
-    document.getElementById("lightElse")?.addEventListener("click", () => {
-      const d = state.draft;
-      d.lightElsewhere = !d.lightElsewhere;
-      if (d.lightElsewhere) {
-        d.lightFloor = d.lightFloor || d.floor;
-        d.lightRoom = d.lightRoom || d.room;
-      }
-      persist(); render();
-    });
     document.getElementById("moreToggle")?.addEventListener("click", () => { state.moreOpen = !state.moreOpen; render(); });
     document.getElementById("saveSw")?.addEventListener("click", () => saveSwitch(false));
     document.getElementById("logDumb")?.addEventListener("click", () => saveSwitch(true));
@@ -1127,6 +1118,14 @@
     }
     else if (field === "gangSize") { state.draft.gangSize = Number(value); if (state.draft.gangPosition > state.draft.gangSize) state.draft.gangPosition = 1; }
     else if (field === "gangPosition") state.draft.gangPosition = Number(value);
+    else if (field === "lightInRoom") {
+      const elsewhere = value === "No";
+      state.draft.lightElsewhere = elsewhere;
+      if (elsewhere) {
+        state.draft.lightFloor = state.draft.lightFloor || state.draft.floor;
+        state.draft.lightRoom = state.draft.lightRoom || state.draft.room;
+      }
+    }
     else if (field === "fixtureCount") {
       if (value === "8+") {
         state.draft.fixtureMany = true;
