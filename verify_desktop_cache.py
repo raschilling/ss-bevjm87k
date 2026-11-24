@@ -41,6 +41,19 @@ def origin_from_base(base):
 
 PLAIN = origin_from_base(BASE)
 
+async def safe_goto(page, url):
+    """Load url, retrying if a service worker or version check aborts the first navigation."""
+    last = None
+    for _ in range(3):
+        try:
+            await page.goto(url, wait_until="load")
+            await page.wait_for_timeout(200)
+            return
+        except Exception as e:
+            last = e
+            await page.wait_for_timeout(300)
+    raise last
+
 SEED_ENCRYPTED = """async (payload) => {
   const META_KEY = "switchSurvey.meta.v1";
   const DATA_KEY = "switchSurvey.data.v2";
@@ -105,7 +118,7 @@ async def fresh_plain(browser, name, color_scheme="dark", viewport=None):
     vp = viewport or DESKTOP
     ctx = await browser.new_context(viewport=vp, color_scheme=color_scheme, device_scale_factor=1)
     page = await ctx.new_page()
-    await page.goto(PLAIN, wait_until="load")
+    await safe_goto(page, PLAIN)
     await page.wait_for_selector("[data-tab='walk']", timeout=8000)
     body = await page.inner_text("body")
     html = await page.content()
@@ -122,10 +135,10 @@ async def encrypted_migrate(browser, name, color_scheme="dark", viewport=None, c
     vp = viewport or DESKTOP
     ctx = await browser.new_context(viewport=vp, color_scheme=color_scheme, device_scale_factor=1)
     page = await ctx.new_page()
-    await page.goto(PLAIN, wait_until="load")
+    await safe_goto(page, PLAIN)
     await page.wait_for_selector("h1")
     await page.evaluate(SEED_ENCRYPTED, {"digits": _OLD, "store": sample_store()})
-    await page.reload(wait_until="load")
+    await safe_goto(page, PLAIN)
     await page.wait_for_selector("#migrateUnlock", timeout=8000)
     body = await page.inner_text("body")
     tag = f"{name} {color_scheme} {vp['width']}"
@@ -208,7 +221,7 @@ async def cached_old_pin_then_network(browser, name):
           "Set a PIN" in body and await page.locator("[data-tab='walk']").count() == 0)
     await page.unroute("**/*")
     # Now load the real plain URL (network / current file)
-    await page.goto(PLAIN, wait_until="load")
+    await safe_goto(page, PLAIN)
     await page.wait_for_selector("[data-tab='walk']", timeout=8000)
     body = await page.inner_text("body")
     check(f"{name} after cache drop, plain URL is the new survey",

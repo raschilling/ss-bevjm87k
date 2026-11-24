@@ -69,6 +69,7 @@ async def run():
         page = await ctx.new_page()
         await page.goto(BASE, wait_until="load")
         await page.wait_for_selector("h1")
+        await page.wait_for_function("() => document.title === 'Switch Survey'", timeout=8000)
         body = await page.inner_text("body")
         src = await page.content()
         check("title", await page.title() == "Switch Survey")
