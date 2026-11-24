@@ -147,7 +147,7 @@ async def read_order(page):
     await page.wait_for_timeout(200)
     q = await qty_on(page)
     body = await page.inner_text("body")
-    dm = re.search(r"(\d+) regular \(not smart\)", body)
+    dm = re.search(r"(\d+) Keep as is \(not smart\)", body)
     loc = re.search(r"(\d+) location", body)
     verify = 0
     if "Verify on site" in body:
@@ -231,6 +231,7 @@ async def run():
               await page.locator("#keypad").count() == 0 and "Set a PIN" not in body and "Enter PIN" not in body
               and "Change PIN" not in body and "Open your saved survey" not in body)
         check("first launch is the survey form", "Add a switch" in body and "Save switch" in body)
+        check("Keep as is (not smart) is on the form", "Keep as is (not smart)" in body and "Regular switch" not in body)
         await shot(page, "393-dark-first-launch.png")
         check("Survey tab label", (await page.locator('[data-tab="walk"]').inner_text()).strip() == "Survey")
         check("no yes/no light question on main survey", "Is the light in this room?" not in body and "Light is in a different room" not in body and "Where is the light?" not in body)
@@ -348,7 +349,12 @@ async def run():
             "dimmer": 1, "onoff": 0, "fan": 0, "companion": 2, "dumb": 0,
             "plates": {1: 3}, "locations": 3, "verify": 0
         })
-        check("S4 4-way badge", "4-way (3 locations)" in (await page.inner_text("body")))
+        check("S4 4-way summary badge", "4-way (3 locations)" in (await page.inner_text("body")))
+        await page.click("[data-tab='walk']")
+        await page.wait_for_timeout(100)
+        body = await page.inner_text("body")
+        check("S4 walk position badges", "4-way 1/3" in body and "4-way 2/3" in body and "4-way 3/3" in body)
+        check("S4 walk has no N locations badge", "4-way (3 locations)" not in body)
 
         # 5. Kitchen 3 can groups: first cans (3-way), sink (3-way), #2 (single).
         # Tags come only from the Same light / New light prompt, not a form field.
@@ -418,7 +424,7 @@ async def run():
         check("S7 DC constant-power note", "DC" in body and "constant power" in body.lower())
         check("S7 verify-on-site names the unsure fan", "Verify on site" in body and "Primary bedroom" in body)
 
-        # 8. Regular switch + optional fixture count 6 and 8+
+        # 8. Keep as is (not smart) + optional fixture count 6 and 8+
         await goto_walk_new_home(page, "S8 Regular and fixture counts")
         await pick_room_load(page, "Closet", "Closet light")
         await log_dumb(page)
@@ -429,7 +435,7 @@ async def run():
         await pick_room_load(page, "Living room", "Can lights")
         await set_fixture(page, 10)
         await save(page)
-        ok, actual, body = await assert_order(page, "S8 regular + fixture count 6 and 8+", {
+        ok, actual, body = await assert_order(page, "S8 keep as is + fixture count 6 and 8+", {
             "dimmer": 2, "onoff": 0, "fan": 0, "companion": 0, "dumb": 1,
             "plates": {1: 2}, "locations": 3, "verify": 0, "wattage": True
         })
@@ -687,6 +693,7 @@ async def run():
         check("light first launch has no PIN screen",
               await light_page.locator("#keypad").count() == 0 and "Set a PIN" not in lbody and "Enter PIN" not in lbody)
         check("light first launch is the survey form", "Add a switch" in lbody and "Save switch" in lbody)
+        check("light form has Keep as is (not smart)", "Keep as is (not smart)" in lbody and "Regular switch" not in lbody)
         await shot(light_page, "393-light-first-launch.png")
         await pick_room_load(light_page, "Kitchen", "Can lights")
         await shot(light_page, "393-light-survey-form.png")

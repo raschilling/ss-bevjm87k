@@ -138,8 +138,8 @@ async def run():
         await page.reload(wait_until="load")
         await page.wait_for_selector("#migrateUnlock")
         body = await page.inner_text("body")
-        check("one-time unlock is shown for encrypted data",
-              "Open your saved survey" in body and "Enter that PIN once" in body)
+        check("one-time move screen is shown for encrypted data",
+              "Move your old survey (one time)" in body and "old 4–6 digit code is needed once" in body and "Skip, start fresh" in body and "Set a PIN" not in body and "Enter PIN" not in body)
         check("setup PIN screens are gone", "Set a PIN" not in body and "Confirm your new PIN" not in body)
         await shot(page, "393-dark-migrate-unlock.png")
 
@@ -147,15 +147,15 @@ async def run():
         await enter_digits(page, "1111")
         await page.wait_for_timeout(400)
         body = await page.inner_text("body")
-        check("wrong PIN keeps the unlock screen", "Open your saved survey" in body and "That PIN did not work" in body)
+        check("wrong code keeps the move screen", "Move your old survey (one time)" in body and "That code did not work" in body)
         flags = await storage_flags(page)
-        check("wrong PIN leaves encrypted data in place", flags["meta"] is True and flags["data"] is False, flags)
+        check("wrong code leaves encrypted data in place", flags["meta"] is True and flags["data"] is False, flags)
 
         await enter_digits(page, _OLD)
         await page.wait_for_selector("[data-tab='walk']", timeout=8000)
         body = await page.inner_text("body")
         check("unlock opens the survey with no PIN screens",
-              await page.locator("#keypad").count() == 0 and "Open your saved survey" not in body)
+              await page.locator("#keypad").count() == 0 and "Move your old survey" not in body)
         await page.click("[data-tab='homes']")
         await page.wait_for_timeout(100)
         body = await page.inner_text("body")
@@ -188,7 +188,7 @@ async def run():
         body = await page.inner_text("body")
         check("after migrate, reload has no unlock prompt",
               await page.locator("#migrateUnlock").count() == 0 and await page.locator("#keypad").count() == 0
-              and "Open your saved survey" not in body and "Enter PIN" not in body)
+              and "Move your old survey" not in body and "Enter PIN" not in body)
         await page.click("[data-tab='homes']")
         await page.wait_for_timeout(100)
         check("after migrate, reload kept the home", "Migrated House" in (await page.inner_text("body")))

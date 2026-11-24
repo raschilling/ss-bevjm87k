@@ -8,6 +8,6 @@ Use **Homes** to add or switch surveys, load the sample house, and export or imp
 
 On the survey, if a room already has the same kind of light, you will be asked whether it is the same light or a new one. Pick a short name like Island or Sink for a new one. If a light is also switched from another spot you have not logged yet, use **Also controlled from** under More. Companions on the order list are the extra switches in a 3-way or 4-way (a 4-way is three locations: 1 smart switch + 2 companions).
 
-If this phone already has a survey that was locked, you will be asked for the old PIN once to keep those homes. After that it will not ask again.
+If this browser still has a survey from the previous version, you can enter the old 4–6 digit lock code once to move it, or skip and start fresh (you can import a JSON backup afterward). After that it will not ask again.
 
 This URL is unlisted. Please do not post it in a public place.
