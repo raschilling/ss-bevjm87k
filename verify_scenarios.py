@@ -70,16 +70,22 @@ async def open_more(page):
         await page.click("#moreToggle")
         await page.wait_for_timeout(80)
 
-async def set_light_elsewhere(page, floor, room):
-    await open_more(page)
-    btn = page.locator("#lightElse")
-    if await btn.get_attribute("aria-pressed") != "true":
-        await btn.click()
-        await page.wait_for_selector("select[data-field='lightRoom']")
-    if floor:
-        await page.click(f'[data-field="lightFloor"] .chip[data-value="{floor}"]')
-    await page.select_option("select[data-field='lightRoom']", room)
-    await page.wait_for_timeout(80)
+async def pick_existing_light(page, contains):
+    await page.wait_for_selector("[data-pick-light]")
+    chips = page.locator("[data-pick-light]")
+    n = await chips.count()
+    needle = contains.lower()
+    labels = []
+    for i in range(n):
+        chip = chips.nth(i)
+        label = ((await chip.get_attribute("data-label")) or (await chip.inner_text()) or "").strip()
+        labels.append(label)
+        if await chip.is_visible() and needle in label.lower():
+            await chip.click()
+            await page.wait_for_timeout(80)
+            return label
+    raise AssertionError(f"no visible light chip containing {contains!r}; chips={labels}")
+
 
 async def set_qualifier(page, tag):
     await page.click(f'[data-field="qualifier"] .chip[data-value="{tag}"]')
@@ -222,9 +228,9 @@ async def run():
         await press_pin(page, PIN, confirm=True)
         await page.wait_for_selector("[data-tab='walk']")
         body = await page.inner_text("body")
-        check("no yes/no light question on main walk", "Is the light in this room?" not in body and "Light is in a different room" not in body)
+        check("no yes/no light question on main walk", "Is the light in this room?" not in body and "Light is in a different room" not in body and "Where is the light?" not in body)
+        check("intro mentions tap name under Load", "tap its name under Load" in body)
         check("Which one? has Island/Sink/#2 tags", "Island" in body and "Sink" in body and "#2" in body)
-        await shot(page, "393-dark-walk-form.png")
 
         # 1. Simple room + 3-gang box
         await goto_walk_new_home(page, "S1 Simple and 3-gang")
@@ -248,14 +254,15 @@ async def run():
             "plates": {1: 2, 3: 1}, "locations": 5, "verify": 0
         })
 
-        # 2. Stairs 3-way across floors via More
+        # 2. Stairs 3-way across floors via light-name chip
         await goto_walk_new_home(page, "S2 Stairs 3-way")
         await pick_room_load(page, "Hall", "Can lights", floor="Upper")
         await save(page)
         await pick_room_load(page, "Stairs", "Can lights", floor="Main")
-        await set_light_elsewhere(page, "Upper", "Hall")
+        check("S2 shows Upper Hall cans chip", "Upper Hall cans" in (await page.inner_text("body")))
+        await pick_existing_light(page, "Upper Hall cans")
         await save(page)
-        check("S2 auto-linked via More, no Same/New", not await has_same_or_new(page))
+        check("S2 auto-linked via chip, no Same/New", not await has_same_or_new(page))
         body = await page.inner_text("body")
         check("S2 3-way badge or flash", "3-way" in body or "Linked as a 3-way" in body)
         await assert_order(page, "S2 stairs 3-way across floors", {
@@ -281,10 +288,11 @@ async def run():
         await pick_room_load(page, "Hall", "Can lights")
         await save(page)
         await pick_room_load(page, "Foyer", "Can lights")
-        await set_light_elsewhere(page, "Main", "Hall")
+        check("S4 shows Main Hall cans chip", "Main Hall cans" in (await page.inner_text("body")))
+        await pick_existing_light(page, "Main Hall cans")
         await save(page)
         await pick_room_load(page, "Living room", "Can lights")
-        await set_light_elsewhere(page, "Main", "Hall")
+        await pick_existing_light(page, "Main Hall cans")
         await save(page)
         await assert_order(page, "S4 4-way hall", {
             "dimmer": 1, "onoff": 0, "fan": 0, "companion": 2, "dumb": 0,
@@ -327,6 +335,12 @@ async def run():
             "plates": {1: 5}, "locations": 5, "verify": 0
         })
         await shot(page, "393-dark-summary.png")
+        await page.click("[data-tab='walk']")
+        await pick_room_load(page, "Kitchen", "Can lights")
+        body = await page.inner_text("body")
+        check("S5 walk form shows tagged light chips", "island cans" in body.lower() and "sink cans" in body.lower() and "#3 cans" in body.lower())
+        check("filter box on walk form", await page.locator('input[data-field="lightFilter"]').count() > 0)
+        await shot(page, "393-dark-walk-form.png")
 
         # 6. Kitchen cans vs Hall cans must not merge
         await goto_walk_new_home(page, "S6 Kitchen vs Hall")
@@ -516,13 +530,19 @@ async def run():
             "plates": {1: 1}, "locations": 1, "verify": 0
         })
 
-        # Light theme screenshots of walk form + summary
+        # Light theme screenshots of walk form + summary, chips visible
+        await page.click("[data-tab='homes']")
+        await page.wait_for_timeout(80)
+        await page.click("text=S5 Kitchen three can groups")
+        await page.wait_for_timeout(150)
         await page.emulate_media(color_scheme="light")
         await page.set_viewport_size({"width": 393, "height": 852})
         await page.click("[data-tab='walk']")
-        await page.wait_for_timeout(80)
+        await pick_room_load(page, "Kitchen", "Can lights")
         bg = await page.eval_on_selector("body", "el => getComputedStyle(el).backgroundColor")
         check("light bg", bg.replace(" ", "") == "rgb(243,241,234)", bg)
+        body = await page.inner_text("body")
+        check("light walk form shows tagged light chips", "island cans" in body.lower() and "sink cans" in body.lower())
         await shot(page, "393-light-walk-form.png")
         await page.click("[data-tab='summary']")
         await page.wait_for_timeout(80)

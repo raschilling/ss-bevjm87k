@@ -84,3 +84,12 @@ A “Not sure” fan now counts toward wallplates, because it still occupies a b
 ## 2026-11-24 — End-to-end scenario suite
 
 `verify_scenarios.py` walks 12 realistic houses in WebKit at 393px and asserts a hand-computed order sheet for each (dimmers, on/off, fan, companions, regular switches, wallplates, verify-on-site, and shopping-list / CSV / JSON agreement).
+
+## 2026-11-24 — Tap a logged light’s name instead of “Light is in a different room”
+
+The **More** choice **Light is in a different room**, and the floor/room fields for the light, are gone from the walk. To add another switch for a light already logged in this home, even from a different room or floor, tap its name under **Load**. Chips list unique lights already logged (load + tag + first room, for example **Upper Hall cans** or **Kitchen island cans**), most recent first, and they filter as you type. Tapping a name means “same light as that one” and groups the switch into a 3-way or 4-way, regardless of the switch’s room. Tapping the same chip again clears the pick.
+
+Same-room **Same light** vs **New light**, plus the optional tags, is unchanged when you save a matching load without tapping a name. Existing `lightFloor` / `lightRoom` values are still stored and still used for labels, previews, and imports.
+
+`verify_scenarios.py` S2 (stairs across floors) and S4 (4-way hall across rooms) now use the chip instead of the old More control.
+
