@@ -130,9 +130,9 @@
   const state = {
     locked: true, setup: false, pinBuf: "", pinAgain: "", setupStep: 1,
     unlockError: "", forgot: 0, key: null, store: null, tab: "walk",
-    draft: emptyDraft("Main", ""), pendingMatch: null, moreOpen: false, flash: ""
+    draft: emptyDraft("Main", ""), pendingMatch: null, moreOpen: false, flash: "", storageOk: true, storageNote: ""
   };
-  let lastHidden = 0;
+  let backgroundedAt = 0;
 
   function uid(prefix) { return prefix + "_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
   function blankHome() { return { id: uid("home"), name: "", brand: "undecided", neutrals: "unknown", rooms: [], switches: [], isExample: false }; }
@@ -512,29 +512,56 @@
     const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(payload.iv) }, key, unb64(payload.ct));
     return JSON.parse(new TextDecoder().decode(pt));
   }
+  function probeStorage() {
+    try {
+      const k = META_KEY + ".probe";
+      localStorage.setItem(k, "ok");
+      const ok = localStorage.getItem(k) === "ok";
+      localStorage.removeItem(k);
+      if (!ok) throw new Error("readback");
+      state.storageOk = true;
+      state.storageNote = "";
+      return true;
+    } catch (e) {
+      state.storageOk = false;
+      state.storageNote = "This browser is not saving data. Turn off Private Browsing and open this page in regular Safari, or use the same Home Screen icon each time. If you just added it to your Home Screen, set your PIN from that icon — Safari and the icon can keep separate copies.";
+      return false;
+    }
+  }
+  function writeMeta(obj) {
+    if (!probeStorage()) throw new Error("storage");
+    localStorage.setItem(META_KEY, JSON.stringify(obj));
+    const back = localStorage.getItem(META_KEY);
+    if (!back) throw new Error("storage");
+  }
   function readMeta() { try { return JSON.parse(localStorage.getItem(META_KEY) || "null"); } catch { return null; } }
   function hasPin() { const m = readMeta(); return Boolean(m && m.salt && m.check); }
+  function isSetup() { return Boolean(state.setup || !hasPin()); }
   async function persist() {
     if (!state.key || !state.store) return;
     try {
       const enc = await encryptJson(state.key, { store: state.store, tab: state.tab, draft: state.draft, pendingMatch: state.pendingMatch });
       const meta = readMeta() || {};
       meta.data = enc;
-      localStorage.setItem(META_KEY, JSON.stringify(meta));
+      writeMeta(meta);
     } catch (err) {
-      state.flash = "Could not save to this browser. Your latest change is on screen only.";
+      state.storageOk = false;
+      state.flash = "Could not save to this browser. Your latest change is on screen only. Avoid Private Browsing, and use the same Safari or Home Screen icon each time.";
       render();
     }
   }
   async function setNewPin(pin) {
+    if (!probeStorage()) throw new Error("storage");
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const key = await deriveKey(pin, salt);
     const check = await encryptJson(key, { ok: true, kind: "ha-switch-survey" });
-    localStorage.setItem(META_KEY, JSON.stringify({ v: 1, salt: b64(salt), iterations: ITERATIONS, check }));
     state.key = key;
     if (!state.store) state.store = defaultStore();
-    await persist();
-    state.locked = false; state.setup = false; state.pinBuf = ""; state.pinAgain = "";
+    const enc = await encryptJson(key, { store: state.store, tab: state.tab, draft: state.draft, pendingMatch: state.pendingMatch });
+    writeMeta({ v: 1, salt: b64(salt), iterations: ITERATIONS, check, data: enc });
+    if (!hasPin()) throw new Error("storage");
+    backgroundedAt = 0;
+    state.locked = false; state.setup = false; state.setupStep = 1; state.pinBuf = ""; state.pinAgain = "";
   }
   async function tryUnlock(pin) {
     const meta = readMeta();
@@ -550,10 +577,17 @@
       state.draft = bundle.draft || emptyDraft("Main", "");
       state.pendingMatch = bundle.pendingMatch || null;
       state.locked = false; state.unlockError = ""; state.pinBuf = "";
+      state.setup = false; state.setupStep = 1; state.pinAgain = "";
+      backgroundedAt = 0;
       return true;
     } catch { return false; }
   }
-  function lockNow() { state.key = null; state.locked = true; state.pinBuf = ""; state.unlockError = ""; state.forgot = 0; render(); }
+  function lockNow() {
+    backgroundedAt = 0;
+    state.key = null; state.locked = true; state.pinBuf = ""; state.pinAgain = ""; state.unlockError = ""; state.forgot = 0;
+    state.setup = false;
+    render();
+  }
   function resetAllData() {
     localStorage.removeItem(META_KEY);
     state.key = null; state.store = null; state.draft = emptyDraft("Main", ""); state.pendingMatch = null;
@@ -587,15 +621,16 @@
     bindMain();
   }
   function renderLock() {
-    const setup = state.setup || !hasPin();
-    const title = setup ? (state.setupStep === 1 ? "Set a PIN" : "Confirm your PIN") : "Enter PIN";
+    const setup = isSetup();
+    const title = setup ? (state.setupStep === 1 ? "Set a PIN" : "Confirm your new PIN") : "Enter PIN";
     const hint = setup
-      ? (state.setupStep === 1 ? "Choose a 4–6 digit PIN for this phone. It is not uploaded anywhere." : "Enter the same PIN once more.")
-      : "This survey is locked on this device.";
+      ? (state.setupStep === 1 ? "Step 1 of 2 — choose a 4–6 digit PIN for this phone. It is not uploaded anywhere." : "Step 2 of 2 — type the same PIN once more to confirm.")
+      : "Type your PIN once, then tap OK. You only confirm twice when first setting a PIN.";
     const buf = setup && state.setupStep === 2 ? state.pinAgain : state.pinBuf;
     const dots = Array.from({ length: Math.max(4, buf.length) }, (_, i) => `<span class="dot ${i < buf.length ? "on" : ""}"></span>`).join("");
     const keys = ["1","2","3","4","5","6","7","8","9","Del","0","OK"];
     let extra = "";
+    if (!state.storageOk && state.storageNote) extra += `<div class="banner danger">${esc(state.storageNote)}</div>`;
     if (setup && hasPin() && state.store) extra += `<button type="button" class="btn quiet" id="cancelSetup">Cancel</button>`;
     if (state.unlockError) extra += `<div class="banner danger">${esc(state.unlockError)}</div>`;
     if (!setup && state.forgot === 0) extra += `<button type="button" class="btn quiet" id="forgot">Forgot PIN</button>`;
@@ -615,7 +650,8 @@
         <button type="button" class="btn" data-tab="summary" aria-current="${state.tab==="summary"?"page":"false"}">Summary${home.switches.length? " · "+home.switches.length:""}</button>
         <button type="button" class="btn" data-tab="homes" aria-current="${state.tab==="homes"?"page":"false"}">Homes</button>
       </div>
-      ${state.flash ? `<div class="banner ok">${esc(state.flash)}</div>` : ""}
+      ${!state.storageOk && state.storageNote ? `<div class="banner danger">${esc(state.storageNote)}</div>` : ""}
+      ${state.flash ? `<div class="banner ${state.storageOk ? "ok" : "danger"}">${esc(state.flash)}</div>` : ""}
       <div id="main"></div>`;
     wrap.querySelector("#main").append(state.tab === "summary" ? renderSummary(home) : state.tab === "homes" ? renderHomes(home) : renderWalk(home));
     return wrap;
@@ -641,7 +677,7 @@
       ${matchHtml}
       <div class="card">
         <h2>${d.editId ? (d.loggedDumb ? "Change a regular switch" : "Edit switch") : "Add a switch"}</h2>
-        <p class="hint">Pick floor, room, and what the switch controls, then how many switches are in this box, and save. If two switches control the same light, use the same name at both ends. Floor and room stay put after you save.</p>
+        <p class="hint">Pick floor, room, and what the switch controls, then save. Switch type is chosen from the load — tap to change. If two switches control the same light, use the same name at both ends. Floor and room stay put after you save.</p>
         <div class="field-wrap"><label class="field">Floor</label>${chipRow("floor", FLOORS, d.floor)}</div>
         <div class="pair-grid">
         ${selectField("Room", "room", ROOMS, d.room)}
@@ -650,16 +686,16 @@
         ${d.room==="Other" ? `<div class="field-wrap"><label class="field">Room name</label><input type="text" data-field="roomOther" value="${esc(d.roomOther)}" placeholder="Mudroom"></div>` : ""}
         ${d.load==="Other" ? `<div class="field-wrap"><label class="field">Load name</label><input type="text" data-field="loadOther" value="${esc(d.loadOther)}" placeholder="Stair lights"></div>` : ""}
         <div class="field-wrap"><label class="field">Which one? (only if this room has two)</label>${chipRow("qualifier", QUALIFIERS, d.qualifier)}<p class="hint">Skip unless the room has two switches for the same kind of light, e.g. Left/Right recessed.</p></div>
-        ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Also controlled from</label>${chipRow("otherSpots", ["None","1 other spot (3-way)","2 other spots (4-way)"], otherSpotsLabel(draftOthers(home, d)))}<p class="hint">If this light has another switch you have not logged yet, tap how many other spots. Logging and linking those later will not double-count them.</p></div>` : ""}
+        ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Switch type</label>${chipRow("kindOverride", ["Dimmer","On/off","Fan"], kindChipLabel(useKind || "dimmer"))}<p class="hint">Filled in from what the switch controls. Tap once to change.</p></div>` : ""}
         ${useKind === "fan" && !d.loggedDumb ? `<div class="field-wrap"><label class="field">Fan type</label>${chipRow("fanType", FAN_TYPES, fanTypeLabel(d.fanType))}<p class="hint">AC uses a fan switch. DC uses an on/off (constant power); speed via fan remote/integration. Not sure is listed under Verify on site and stays off the order until you choose.</p></div>` : ""}
+        ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Also controlled from</label>${chipRow("otherSpots", ["None","1 other spot (3-way)","2 other spots (4-way)"], otherSpotsLabel(draftOthers(home, d)))}<p class="hint">If this light has another switch you have not logged yet, tap how many other spots. Logging and linking those later will not double-count them.</p></div>` : ""}
         ${d.load ? `<div class="auto">${esc(preview)} · ${esc(orderHint(d, useKind))}.${badgeHtml(draftOthers(home, d))}</div>` : ""}
         ${showLoc ? `<div class="field-wrap"><label class="field">Where is this switch?</label>${chipRow("location", LOCATIONS, d.location)}<p class="hint">Used to tell two or more switches for the same light apart, e.g. top of stairs vs bottom.</p></div>` : ""}
         ${showLoc && d.location==="Other" ? `<div class="field-wrap"><label class="field">Custom location</label><input type="text" data-field="locationOther" value="${esc(d.locationOther)}" placeholder="Landing"></div>` : ""}
-        <div class="field-wrap"><label class="field">Switches in this box</label>${chipRow("gangSize", ["1","2","3","4"], String(d.gangSize))}<p class="hint">How many switches share this wall box, including this one.</p></div>
-        ${d.gangSize > 1 ? `<div class="field-wrap"><label class="field">Which slot, left to right?</label>${chipRow("gangPosition", Array.from({length:d.gangSize},(_,i)=>String(i+1)), String(d.gangPosition))}<p class="hint">Count from the left as you face the wall.</p></div>` : ""}
         <button type="button" class="btn" id="moreToggle">${state.moreOpen ? "Hide more" : "More"}</button>
         <div id="more" class="${state.moreOpen ? "" : "hidden"}" style="margin-top:12px">
-          <div class="field-wrap"><label class="field">Switch type, if the usual choice is wrong</label>${chipRow("kindOverride", ["Dimmer","On/off","Fan"], kindChipLabel(d.kindOverride || useKind))}<p class="hint">Most lights order as a dimmer, fans as a fan switch, and a few as on/off. Change this only if that is wrong.</p></div>
+          <div class="field-wrap"><label class="field">Switches in this box</label>${chipRow("gangSize", ["1","2","3","4"], String(d.gangSize))}<p class="hint">How many switches share this wall box, including this one. Most are just one.</p></div>
+          ${d.gangSize > 1 ? `<div class="field-wrap"><label class="field">Which slot, left to right?</label>${chipRow("gangPosition", Array.from({length:d.gangSize},(_,i)=>String(i+1)), String(d.gangPosition))}<p class="hint">Count from the left as you face the wall.</p></div>` : ""}
           <div class="field-wrap"><label class="field">Note, optional</label><textarea data-field="note" placeholder="Traveler colors, leftover questions">${esc(d.note)}</textarea></div>
         </div>
         <div class="stack" style="margin-top:12px">
@@ -783,36 +819,53 @@
       render();
     });
   }
+  function pinField() { return isSetup() && state.setupStep === 2 ? "pinAgain" : "pinBuf"; }
+  function paintPinDots() {
+    const field = pinField();
+    const buf = state[field] || "";
+    const el = document.querySelector(".dots");
+    if (!el) { render(); return; }
+    el.innerHTML = Array.from({ length: Math.max(4, buf.length) }, (_, i) => `<span class="dot ${i < buf.length ? "on" : ""}"></span>`).join("");
+  }
   function onKey(ev) {
     const btn = ev.target.closest("[data-key]"); if (!btn) return;
+    ev.preventDefault();
     const k = btn.getAttribute("data-key");
-    const setup = state.setup || !hasPin();
-    const field = setup && state.setupStep === 2 ? "pinAgain" : "pinBuf";
-    if (k === "Del") { state[field] = state[field].slice(0, -1); state.unlockError = ""; render(); return; }
+    const field = pinField();
+    if (k === "Del") { state[field] = state[field].slice(0, -1); state.unlockError = ""; paintPinDots(); return; }
     if (k === "OK") { submitPin(); return; }
     if (state[field].length >= 6) return;
     state[field] += k; state.unlockError = "";
-    render();
-    if (!setup && state[field].length >= 4) {
-      clearTimeout(window.__ssPinTimer);
-      const wait = state[field].length >= 6 ? 40 : 700;
-      window.__ssPinTimer = setTimeout(submitPin, wait);
-    }
+    paintPinDots();
   }
   async function submitPin() {
-    const setup = state.setup || !hasPin();
+    if (state.pinBusy) return;
+    const setup = isSetup();
     if (setup) {
       if (state.setupStep === 1) {
         if (state.pinBuf.length < 4 || state.pinBuf.length > 6) { state.unlockError = "Use 4 to 6 digits."; render(); return; }
         state.setupStep = 2; state.unlockError = ""; render(); return;
       }
       if (state.pinAgain !== state.pinBuf) { state.unlockError = "PINs did not match. Start over."; state.setupStep = 1; state.pinBuf = ""; state.pinAgain = ""; render(); return; }
-      await setNewPin(state.pinBuf); flash("PIN set. This survey is saved only on this phone."); render(); return;
+      state.pinBusy = true;
+      try {
+        await setNewPin(state.pinBuf);
+        flash("PIN set. This survey is saved only on this phone. Use the same Safari or Home Screen icon next time, and avoid Private Browsing.");
+        render();
+      } catch (e) {
+        state.unlockError = state.storageNote || "Could not save your PIN in this browser. Turn off Private Browsing and try again.";
+        state.setupStep = 1;
+        render();
+      } finally { state.pinBusy = false; }
+      return;
     }
-    if (state.pinBuf.length < 4) return;
-    const ok = await tryUnlock(state.pinBuf);
-    if (!ok) { state.unlockError = "That PIN did not work."; state.pinBuf = ""; render(); return; }
-    render();
+    if (state.pinBuf.length < 4) { state.unlockError = "Use 4 to 6 digits, then tap OK."; render(); return; }
+    state.pinBusy = true;
+    try {
+      const ok = await tryUnlock(state.pinBuf);
+      if (!ok) { state.unlockError = "That PIN did not work. Type it once and tap OK."; state.pinBuf = ""; render(); return; }
+      render();
+    } finally { state.pinBusy = false; }
   }
   function flash(msg) { state.flash = msg; setTimeout(() => { if (state.flash === msg) { state.flash = ""; render(); } }, 4000); }
   function bindMain() {
@@ -824,7 +877,12 @@
       btn.addEventListener("click", () => onChip(field, btn.getAttribute("data-value")));
     });
     document.querySelectorAll("select[data-field], input[data-field], textarea[data-field]").forEach((el) => {
-      el.addEventListener("input", () => { state.draft[el.getAttribute("data-field")] = el.value; persist(); render(); });
+      el.addEventListener("input", () => {
+        const field = el.getAttribute("data-field");
+        state.draft[field] = el.value;
+        if (field === "load") state.draft.kindOverride = "";
+        persist(); render();
+      });
     });
     document.getElementById("moreToggle")?.addEventListener("click", () => { state.moreOpen = !state.moreOpen; render(); });
     document.getElementById("saveSw")?.addEventListener("click", () => saveSwitch(false));
@@ -856,7 +914,11 @@
     }
     if (field === "qualifier" && state.draft.qualifier === value) state.draft.qualifier = "";
     else if (field === "location" && state.draft.location === value) state.draft.location = "";
-    else if (field === "kindOverride") state.draft.kindOverride = kindChipValue(value);
+    else if (field === "kindOverride") {
+      const v = kindChipValue(value);
+      const derived = kindForLoad(state.draft.load === "Other" ? "Other" : state.draft.load);
+      state.draft.kindOverride = (v === derived) ? "" : v;
+    }
     else if (field === "fanType") state.draft.fanType = fanTypeValue(value);
     else if (field === "otherSpots") {
       const home = homeOf();
@@ -964,7 +1026,7 @@
       gangSize: sw.gangSize, gangPosition: sw.gangPosition, loggedDumb: sw.loggedDumb,
       note: sw.note || "", kindOverride: sw.kindOverride || "", fanType: sw.fanType || "", otherSpots: Number(sw.otherSpots) || 0, groupId: sw.groupId || ""
     };
-    state.moreOpen = Boolean(sw.note || sw.kindOverride);
+    state.moreOpen = Boolean(sw.note || Number(sw.gangSize) > 1 || Number(sw.gangPosition) > 1);
     persist(); render();
     window.scrollTo(0, 0);
   }
@@ -1046,21 +1108,35 @@
     };
     reader.readAsText(file);
   }
+  function onBackground() {
+    if (!state.locked && state.key) backgroundedAt = Date.now();
+  }
+  function onForeground() {
+    if (state.key && !state.locked && backgroundedAt && Date.now() - backgroundedAt >= IDLE_MS) lockNow();
+    else if (!state.locked) backgroundedAt = 0;
+  }
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) lastHidden = Date.now();
-    else if (state.key && lastHidden && Date.now() - lastHidden >= IDLE_MS) lockNow();
+    if (document.hidden) onBackground();
+    else onForeground();
   });
-  window.addEventListener("pagehide", () => { lastHidden = Date.now(); });
+  window.addEventListener("pagehide", onBackground);
   window.addEventListener("pageshow", (ev) => {
-    if (ev.persisted && state.key && lastHidden && Date.now() - lastHidden >= IDLE_MS) lockNow();
+    if (ev.persisted) onForeground();
   });
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyChrome);
   applyChrome();
+  probeStorage();
   state.setup = !hasPin();
   if (["127.0.0.1","localhost"].includes(location.hostname)) {
     window.__ss = {
-      forceIdleLock() { lastHidden = Date.now() - IDLE_MS; lockNow(); },
+      forceIdleLock() { backgroundedAt = Date.now() - IDLE_MS; lockNow(); },
+      setStaleBackground() { backgroundedAt = Date.now() - IDLE_MS; },
+      foreground() { onForeground(); },
+      background() { onBackground(); },
       isLocked() { return state.locked; },
+      isSetup() { return isSetup(); },
+      setupStep() { return state.setupStep; },
+      lockTitle() { const h = document.querySelector(".card h2"); return h ? h.textContent : ""; },
       counts() { const h = homeOf(); return h ? summaryOf(h) : null; }
     };
   }
