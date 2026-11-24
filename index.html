@@ -12,7 +12,7 @@
   <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f3f1ea">
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
   <meta name="robots" content="noindex, nofollow, noarchive">
-  <meta name="description" content="Private switch walk survey.">
+  <meta name="description" content="Private switch survey.">
   <style>
     :root {
       color-scheme: light dark;
@@ -32,13 +32,25 @@
       }
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; min-height: 100%; }
-    body { padding: calc(12px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom)); margin: 0; }
+    html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; min-height: 100%; }
+    body { padding: calc(8px + env(safe-area-inset-top)) 12px calc(16px + env(safe-area-inset-bottom)); margin: 0; }
     #app { width: 100%; max-width: 720px; margin: 0 auto; }
-    h1 { font-size: 1.45rem; margin: 0 0 4px; letter-spacing: -.02em; }
-    h2 { font-size: 1.05rem; margin: 0 0 10px; }
-    p, .hint { color: var(--muted); font-size: .92rem; margin: 0 0 10px; }
-    details.neutrals-override { margin-top: 12px; }
+    h1 { font-size: 1.28rem; margin: 0 0 2px; letter-spacing: -.02em; }
+    h2 { font-size: 1rem; margin: 0 0 6px; }
+    p, .hint { color: var(--muted); font-size: .9rem; margin: 0 0 8px; }
+    .hint.hidden { display: none !important; }
+    .label-row { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; }
+    .label-row .field { margin: 0; flex: 1 1 auto; }
+    .info-btn {
+      appearance: none; position: relative; flex: 0 0 auto; width: 22px; height: 22px;
+      border-radius: 50%; border: 1.5px solid var(--line); background: var(--chip);
+      color: var(--muted); font: 700 11px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      padding: 0; cursor: pointer;
+    }
+    .info-btn::before { content: ""; position: absolute; inset: -10px; }
+    .info-btn[aria-expanded="true"] { background: var(--chip-on); color: var(--chip-on-ink); border-color: var(--chip-on); }
+    .fixture-add { appearance: none; border: 0; background: transparent; color: var(--accent); font: 650 0.88rem/1.2 inherit; padding: 6px 0; min-height: 32px; cursor: pointer; text-align: left; }
+    details.neutrals-override { margin-top: 8px; }
     details.neutrals-override > summary {
       color: var(--muted); font-size: .92rem; cursor: pointer; list-style: none;
       text-decoration: underline; text-underline-offset: 2px;
@@ -48,34 +60,34 @@
     .logged-row .list-item { flex: 1; margin: 0; }
     button, select, input, textarea { font: inherit; }
     button { cursor: pointer; }
-    .topbar { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
-    .sub { color: var(--muted); font-size: .82rem; }
-    .card { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin: 0 0 12px; box-shadow: var(--shadow); }
+    .topbar { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .sub { color: var(--muted); font-size: .78rem; }
+    .card { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin: 0 0 8px; box-shadow: var(--shadow); }
     .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    label.field { display: block; font-size: .78rem; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
-    .field-wrap { margin: 0 0 12px; }
+    label.field { display: block; font-size: .75rem; font-weight: 600; color: var(--muted); margin: 0 0 4px; }
+    .field-wrap { margin: 0 0 8px; }
     select, input[type=text], input[type=number], textarea { width: 100%; max-width: 420px; min-height: var(--tap); border: 1.5px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--ink); padding: 10px 12px; font-size: 16px; display: block; }
     input[data-field="fixtureCount"] { max-width: 7rem; margin-top: 8px; }
     textarea { min-height: 72px; resize: vertical; }
-    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-    .chip { appearance: none; border: 1.5px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 999px; min-height: 44px; padding: 8px 14px; font-weight: 600; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { appearance: none; border: 1.5px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 999px; min-height: 40px; padding: 6px 12px; font-weight: 600; }
     .chip[aria-pressed="true"] { background: var(--chip-on); color: var(--chip-on-ink); border-color: var(--chip-on); }
-    .btn { appearance: none; border: 1.5px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 12px; min-height: var(--tap); padding: 10px 14px; font-weight: 650; flex: 1 1 auto; }
+    .btn { appearance: none; border: 1.5px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 12px; min-height: 44px; padding: 8px 12px; font-weight: 650; flex: 1 1 auto; }
     .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
     .btn.danger { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
     .btn.quiet { background: transparent; }
     .btn:disabled { opacity: .45; }
-    .tabs { display: flex; gap: 6px; margin: 0 0 12px; }
+    .tabs { display: flex; gap: 6px; margin: 0 0 8px; }
     .tabs .btn { flex: 1; }
     .tabs .btn[aria-current="page"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-    .banner { border-radius: 12px; padding: 10px 12px; margin: 0 0 12px; }
+    .banner { border-radius: 12px; padding: 8px 10px; margin: 0 0 8px; }
     .banner.warn { background: var(--warn-bg); color: var(--warn); }
     .banner.ok { background: var(--ok-bg); color: var(--ok); }
     .banner.danger { background: var(--danger-bg); color: var(--danger); }
     .list-item { width: 100%; text-align: left; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 12px; padding: 10px 12px; min-height: 52px; }
     .list-item strong { display: block; }
     .list-item span { color: var(--muted); font-size: .85rem; }
-    .auto { background: var(--auto); color: var(--auto-ink); font-size: .82rem; padding: 8px 10px; border-radius: 10px; margin: 0 0 10px; }
+    .auto { background: var(--auto); color: var(--auto-ink); font-size: .8rem; padding: 6px 8px; border-radius: 10px; margin: 0 0 8px; }
     .mw { background: color-mix(in srgb, var(--accent) 14%, var(--paper)); border-color: var(--accent); }
     .dumb { opacity: .72; }
     table { width: 100%; border-collapse: collapse; font-size: .9rem; }
@@ -97,7 +109,7 @@
     table { max-width: 100%; }
     @media (max-width: 400px) {
       body { padding-left: max(10px, env(safe-area-inset-left)); padding-right: max(10px, env(safe-area-inset-right)); }
-      .chip { min-height: 44px; padding: 8px 12px; }
+      .chip { min-height: 40px; padding: 6px 10px; }
       .key { height: 56px; }
     }
     @media (min-width: 700px) {
@@ -124,7 +136,8 @@
   const IDLE_MS = 5 * 60 * 1000;
   const ITERATIONS = 150000;
   const FLOORS = ["Basement","Main","Upper","Exterior"];
-  const ROOMS = ["Basement","Bedroom","Closet","Dining room","Exterior","Family room","Foyer","Garage","Guest bath","Half bath","Hall","Kitchen","Laundry","Living room","Office","Primary bath","Primary bedroom","Stairs","Other"];
+  const INDOOR_ROOMS = ["Bedroom","Closet","Dining room","Family room","Foyer","Garage","Guest bath","Half bath","Hall","Kitchen","Laundry","Living room","Office","Primary bath","Primary bedroom","Stairs","Other"];
+  const EXTERIOR_ROOMS = ["Back patio","Deck","Driveway","Front porch","Garage exterior","Landscape","Side door","Other"];
   const LOADS = ["Can lights","Ceiling fan","Chandelier","Closet light","Exhaust fan","Exterior lights","Fan + light","Flood lights","Lamp outlet","Pendants","Sconces","Under-cabinet","Vanity light","Wafer lights","Other"];
   const MULTI_FIXTURE_LOADS = ["Can lights","Chandelier","Exterior lights","Flood lights","Pendants","Sconces","Under-cabinet","Wafer lights"];
   const SHORT_LOAD = {"Can lights":"cans","Wafer lights":"wafers","Sconces":"sconces","Pendants":"pendants","Under-cabinet":"under-cabinet","Chandelier":"chandelier","Flood lights":"floods","Exterior lights":"exterior lights"};
@@ -141,7 +154,7 @@
   const state = {
     locked: true, setup: false, pinBuf: "", pinAgain: "", setupStep: 1,
     unlockError: "", forgot: 0, key: null, store: null, tab: "walk",
-    draft: emptyDraft("Main", ""), pendingMatch: null, moreOpen: false, flash: "", storageOk: true, storageNote: ""
+    draft: emptyDraft("Main", ""), pendingMatch: null, moreOpen: false, openHints: {}, fixtureOpen: false, flash: "", storageOk: true, storageNote: ""
   };
   let backgroundedAt = 0;
 
@@ -151,12 +164,77 @@
     return { editId: "", floor: floor || "Main", room: room || "", roomOther: "", load: "", loadOther: "", qualifier: "", location: "", locationOther: "", gangSize: 1, gangPosition: 1, loggedDumb: false, note: "", kindOverride: "", fanType: "", otherSpots: 0, fixtureCount: "", fixtureMany: false, lightElsewhere: false, lightFloor: "", lightRoom: "", lightRoomOther: "", pickedLightId: "", lightFilter: "", groupId: "" };
   }
   function defaultStore() { const home = blankHome(); return { version: 1, kind: "ha-switch-survey", homes: [home], activeHomeId: home.id }; }
+  function sensibleExteriorSpot(sw) {
+    if (!sw) return "Other";
+    const other = ((sw.loadOther || sw.note || "") + "").toLowerCase();
+    const locRaw = sw.location === "Other" ? (sw.locationOther || "") : (sw.location || "");
+    const loc = locRaw.toLowerCase();
+    const blob = other + " " + loc;
+    if (/landscape/.test(blob)) return "Landscape";
+    if (sw.load === "Flood lights") return "Driveway";
+    if (locRaw === "Garage door" || /garage/.test(blob)) return "Garage exterior";
+    if (/deck/.test(blob)) return "Deck";
+    if (locRaw === "Back door" || /patio/.test(blob) || (/back/.test(blob) && !/backsplash/.test(blob))) return "Back patio";
+    if (locRaw === "Entry" || sw.load === "Exterior lights" || /porch|front/.test(blob)) return "Front porch";
+    if (/side/.test(blob)) return "Side door";
+    return "Other";
+  }
   function migrateHomes(store) {
     if (!store || !Array.isArray(store.homes)) return false;
     let changed = false;
     store.homes.forEach((h) => {
       if (!h.neutrals || h.neutrals === "unknown") { h.neutrals = "yes"; changed = true; }
       if (h && "shoppingNotes" in h) { delete h.shoppingNotes; changed = true; }
+      const rooms = h.rooms || [];
+      const switches = h.switches || [];
+      const upsert = (floor, name) => {
+        let r = rooms.find((x) => x.floor === floor && x.name === name);
+        if (!r) { r = { id: uid("room"), name, floor }; rooms.push(r); }
+        return r;
+      };
+      rooms.slice().forEach((r) => {
+        if (r.name === "Basement") {
+          const dest = upsert("Basement", "Main area");
+          switches.forEach((s) => {
+            if (s.roomId === r.id) { s.roomId = dest.id; s.floor = "Basement"; }
+          });
+          if (dest !== r) r._drop = true;
+          else { r.name = "Main area"; r.floor = "Basement"; }
+          changed = true;
+        } else if (r.name === "Exterior") {
+          switches.forEach((s) => {
+            if (s.roomId !== r.id) return;
+            const dest = upsert("Exterior", sensibleExteriorSpot(s));
+            s.roomId = dest.id;
+            s.floor = "Exterior";
+          });
+          r._drop = true;
+          changed = true;
+        }
+      });
+      switches.forEach((s) => {
+        if (s.lightRoom === "Basement") {
+          s.lightRoom = "Main area";
+          if (!s.lightFloor || s.lightFloor === "Basement") s.lightFloor = "Basement";
+          changed = true;
+        } else if (s.lightRoom === "Exterior") {
+          s.lightRoom = sensibleExteriorSpot(s);
+          s.lightFloor = s.lightFloor || "Exterior";
+          changed = true;
+        }
+      });
+      const byKey = {};
+      rooms.forEach((r) => {
+        if (r._drop) return;
+        const key = r.floor + "|" + r.name;
+        if (!byKey[key]) byKey[key] = r;
+        else {
+          switches.forEach((s) => { if (s.roomId === r.id) s.roomId = byKey[key].id; });
+          r._drop = true;
+          changed = true;
+        }
+      });
+      if (rooms.some((r) => r._drop)) h.rooms = rooms.filter((r) => !r._drop);
     });
     return changed;
   }
@@ -223,7 +301,35 @@
     if (!lf && !lr) return false;
     return lightFloorOf(sw) !== (sw.floor || "") || lightRoomOf(sw, home) !== roomNameOf(sw, home);
   }
-  function locPair(floor, room) { return [floor, room].filter(Boolean).join(" "); }
+  function roomsForFloor(floor) {
+    if (floor === "Exterior") return EXTERIOR_ROOMS.slice();
+    if (floor === "Basement") {
+      return INDOOR_ROOMS.filter((r) => r !== "Other").concat(["Main area", "Utility"]).sort((a, b) => a.localeCompare(b)).concat(["Other"]);
+    }
+    return INDOOR_ROOMS.slice();
+  }
+  function isListedRoom(floor, name) { return roomsForFloor(floor).indexOf(name) !== -1; }
+  function locPair(floor, room) {
+    const f = (floor || "").trim();
+    const r = (room || "").trim();
+    if (!f) return r;
+    if (!r) return f;
+    const fl = f.toLowerCase(), rl = r.toLowerCase();
+    if (rl === fl) return r;
+    if (rl.startsWith(fl + " ") || rl.endsWith(" " + fl) || rl.indexOf(" " + fl + " ") !== -1) return r;
+    return f + " " + r;
+  }
+  function hintOpen(id) { return !!(state.openHints && state.openHints[id]); }
+  function fieldHead(label, hintId, hintText) {
+    const info = hintText ? `<button type="button" class="info-btn" data-toggle-hint="${esc(hintId)}" aria-expanded="${hintOpen(hintId) ? "true" : "false"}" aria-label="About ${esc(label)}">i</button>` : "";
+    const hint = hintText ? `<p class="hint${hintOpen(hintId) ? "" : " hidden"}" id="hint-${esc(hintId)}">${hintText}</p>` : "";
+    return `<div class="label-row"><label class="field">${esc(label)}</label>${info}</div>${hint}`;
+  }
+  function headingInfo(title, hintId, hintText) {
+    const info = hintText ? `<button type="button" class="info-btn" data-toggle-hint="${esc(hintId)}" aria-expanded="${hintOpen(hintId) ? "true" : "false"}" aria-label="About ${esc(title)}">i</button>` : "";
+    const hint = hintText ? `<p class="hint${hintOpen(hintId) ? "" : " hidden"}" id="hint-${esc(hintId)}">${hintText}</p>` : "";
+    return `<div class="label-row"><h2 style="margin:0;flex:1">${title}</h2>${info}</div>${hint}`;
+  }
   function switchVsLight(sw, home) {
     if (!lightIsElsewhere(sw, home)) return "";
     return "Switch: " + locPair(sw.floor, roomNameOf(sw, home)) + " → Light: " + locPair(lightFloorOf(sw), lightRoomOf(sw, home));
@@ -249,8 +355,8 @@
     const q = sw.qualifier || "";
     const n = fixtureCountOf(sw);
     const count = n ? " x" + n : "";
-    if (/^[1-4]$/.test(q)) return [sw.floor, roomName, q, load].filter(Boolean).join(" ") + count;
-    return [sw.floor, roomName, load, q].filter(Boolean).join(" ") + count;
+    if (/^[1-4]$/.test(q)) return [locPair(sw.floor, roomName), q, load].filter(Boolean).join(" ") + count;
+    return [locPair(sw.floor, roomName), load, q].filter(Boolean).join(" ") + count;
   }
   function roomNameOf(sw, home) { const r = (home.rooms || []).find((x) => x.id === sw.roomId); return r ? r.name : ""; }
   function isSmart(sw) { return sw.loggedDumb !== true; }
@@ -369,7 +475,7 @@
     d.lightRoom = lightRoomOf(sw, home);
     d.lightRoomOther = "";
     d.lightElsewhere = d.lightFloor !== d.floor || d.lightRoom !== effectiveRoom(d);
-    if (d.lightRoom && ROOMS.indexOf(d.lightRoom) === -1) {
+    if (d.lightRoom && !isListedRoom(d.lightFloor, d.lightRoom)) {
       d.lightRoomOther = d.lightRoom;
       d.lightRoom = "Other";
     }
@@ -390,7 +496,7 @@
       if (show) visible++;
       return `<button type="button" class="chip" data-pick-light="${s.id}" data-label="${esc(label)}" data-load="${esc(s.load || "")}" aria-pressed="${on ? "true" : "false"}" style="${show ? "" : "display:none"}">${esc(label)}</button>`;
     }).join("");
-    return `<div class="field-wrap" id="loggedLights"><label class="field">Same as a light already logged</label><input type="text" data-field="lightFilter" value="${esc(d.lightFilter || "")}" placeholder="Type to filter, e.g. kitchen or island" autocomplete="off"><div class="chips" style="margin-top:8px">${chips}</div><p class="hint" id="noLightMatch" style="${visible ? "display:none" : ""}">No matching lights.</p><p class="hint">Tap a name to add another switch for that same light, even from a different room. That makes a 3-way or 4-way.</p></div>`;
+    return `<div class="field-wrap" id="loggedLights">${fieldHead("Same as a light already logged", "loggedLights", "Tap a name to add another switch for that same light, even from a different room. That makes a 3-way or 4-way.")}<input type="text" data-field="lightFilter" value="${esc(d.lightFilter || "")}" placeholder="Type to filter, e.g. kitchen or island" autocomplete="off"><div class="chips" style="margin-top:6px">${chips}</div><p class="hint" id="noLightMatch" style="${visible ? "display:none" : ""}">No matching lights.</p></div>`;
   }
   function usedLightTags(home, rec) {
     return findSameLoadAndPlace(home, rec).map((s) => s.qualifier || "");
@@ -582,6 +688,11 @@
     if (groups.length) issues.push("Confirm traveler wiring and which box has line for " + groups.length + " multi-way group" + (groups.length === 1 ? "" : "s") + ". Put the smart main where line and, if possible, a neutral arrive.");
     const heavy = home.switches.filter((s) => isSmart(s) && fixtureCountOf(s) >= 6);
     if (heavy.length) issues.push("Check that the total fixture wattage stays within the switch's rating for: " + heavy.map((s) => listLabel(s, home)).join("; ") + ". This matters most with many LED cans or wafers on a dimmer.");
+    if (home.brand === "inovelli" && home.neutrals === "no") {
+      const smallLed = ["Can lights","Wafer lights","Pendants","Sconces","Under-cabinet"];
+      const tiny = home.switches.filter((s) => isSmart(s) && smallLed.indexOf(s.load) !== -1 && fixtureCountOf(s) >= 1 && fixtureCountOf(s) <= 2);
+      if (tiny.length) issues.push("Inovelli dimmers on 1–2 small LEDs without a neutral may flicker; plan an LED bypass, or add more load, for: " + tiny.map((s) => listLabel(s, home)).join("; ") + ".");
+    }
     return { dimmer, onoff, fan, companion, dumb, dcFanOnOff, unsureDimmable, plates, groups, issues, verifyOnSite, locations: home.switches.length };
   }
   function orderRows(home) {
@@ -662,8 +773,8 @@
     ["Main","Closet","Closet light","","",1,1,"Dumb",""],
     ["Main","Family room","Can lights","","",2,1,"",""],
     ["Main","Family room","Sconces","","",2,2,"",""],
-    ["Exterior","Exterior","Flood lights","","",1,1,"",""],
-    ["Exterior","Exterior","Other","","",1,1,"","Landscape lights"],
+    ["Exterior","Driveway","Flood lights","","",1,1,"",""],
+    ["Exterior","Landscape","Other","","",1,1,"","Landscape lights"],
     ["Upper","Hall","Wafer lights","","Hall",1,1,"",""],
     ["Upper","Hall","Closet light","","",1,1,"Dumb",""],
     ["Upper","Primary bedroom","Fan + light","","",2,1,"",""],
@@ -855,9 +966,9 @@
   function chipRow(name, values, current) {
     return `<div class="chips" data-field="${name}">` + values.map((v) => `<button type="button" class="chip" data-value="${esc(v)}" aria-pressed="${current===v?"true":"false"}">${esc(v)}</button>`).join("") + `</div>`;
   }
-  function selectField(label, name, values, current) {
+  function selectField(label, name, values, current, hintId, hintText) {
     const opts = [["","Choose…"]].concat(values.map((v) => [v,v]));
-    return `<div class="field-wrap"><label class="field">${esc(label)}</label><select data-field="${name}">` + opts.map(([v,l]) => `<option value="${esc(v)}" ${current===v?"selected":""}>${esc(l)}</option>`).join("") + `</select></div>`;
+    return `<div class="field-wrap">${fieldHead(label, hintId, hintText)}<select data-field="${name}">` + opts.map(([v,l]) => `<option value="${esc(v)}" ${current===v?"selected":""}>${esc(l)}</option>`).join("") + `</select></div>`;
   }
 
   function render() {
@@ -893,7 +1004,7 @@
     const wrap = document.createElement("div");
     wrap.innerHTML = `<div class="topbar"><div><h1>Switch Survey</h1><div class="sub">${home.isExample ? "EXAMPLE DATA · " : ""}${esc(home.name || "Name this home")} · ${home.switches.length} location${home.switches.length===1?"":"s"}</div></div></div>
       <div class="tabs" role="tablist">
-        <button type="button" class="btn" data-tab="walk" aria-current="${state.tab==="walk"?"page":"false"}">Walk</button>
+        <button type="button" class="btn" data-tab="walk" aria-current="${state.tab==="walk"?"page":"false"}">Survey</button>
         <button type="button" class="btn" data-tab="summary" aria-current="${state.tab==="summary"?"page":"false"}">Summary${home.switches.length? " · "+home.switches.length:""}</button>
         <button type="button" class="btn" data-tab="homes" aria-current="${state.tab==="homes"?"page":"false"}">Homes</button>
       </div>
@@ -961,38 +1072,38 @@
     })();
     const frag = document.createElement("div");
     frag.innerHTML = `
-      <div class="card"><label class="field">Home name</label><input type="text" id="homeName" placeholder="Name this house" value="${esc(home.name)}" autocomplete="off"></div>
       ${pendingChoiceHtml(home)}
       <div class="card">
-        <h2>${d.editId ? (d.loggedDumb ? "Change a regular switch" : "Edit switch") : "Add a switch"}</h2>
-        <p class="hint">Walk every switch in order. Floor and room stay put after you save. If this room has more than one of the same kind of light, tag it under Which one? or pick New light when asked. To add another switch for a light you already logged, even in another room, tap its name under Load.</p>
-        <div class="field-wrap"><label class="field">Where the switch is</label>${chipRow("floor", FLOORS, d.floor)}<p class="hint">Floor and room are where this switch is.</p></div>
+        ${headingInfo(d.editId ? (d.loggedDumb ? "Change a regular switch" : "Edit switch") : "Add a switch", "addSwitch", "Survey every switch in order. Floor and room stay put after you save. If this room has more than one of the same kind of light, tag it under Which one? or pick New light when asked. To add another switch for a light you already logged, even in another room, tap its name under Load.")}
+        <div class="field-wrap">${fieldHead("Where the switch is", "floor", "Floor and room are where this switch is.")}${chipRow("floor", FLOORS, d.floor)}</div>
         <div class="pair-grid">
-        ${selectField("Room", "room", ROOMS, d.room)}
+        ${selectField("Room", "room", roomsForFloor(d.floor), d.room)}
         ${selectField("Load", "load", LOADS, d.load)}
         </div>
-        ${d.room==="Other" ? `<div class="field-wrap"><label class="field">Room name</label><input type="text" data-field="roomOther" value="${esc(d.roomOther)}" placeholder="Mudroom"></div>` : ""}
-        ${d.load==="Other" ? `<div class="field-wrap"><label class="field">Load name</label><input type="text" data-field="loadOther" value="${esc(d.loadOther)}" placeholder="Stair lights"></div>` : ""}
+        ${d.room==="Other" ? `<div class="field-wrap">${fieldHead("Room name")}<input type="text" data-field="roomOther" value="${esc(d.roomOther)}" placeholder="Mudroom"></div>` : ""}
+        ${d.load==="Other" ? `<div class="field-wrap">${fieldHead("Load name")}<input type="text" data-field="loadOther" value="${esc(d.loadOther)}" placeholder="Stair lights"></div>` : ""}
         ${existingLightsHtml(home, d)}
-        ${isMultiFixture(d.load) ? `<div class="field-wrap"><label class="field">How many?</label>${chipRow("fixtureCount", ["1","2","3","4","5","6","7","8","8+"], (d.fixtureMany || Number(d.fixtureCount) > 8) ? "8+" : (d.fixtureCount ? String(d.fixtureCount) : ""))}${(d.fixtureMany || Number(d.fixtureCount) > 8) ? `<input type="number" data-field="fixtureCount" inputmode="numeric" min="9" step="1" value="${esc(String(d.fixtureCount || ""))}" placeholder="9 or more">` : ""}<p class="hint">Optional. How many lights this switch controls, e.g. 6 cans in a hall.</p></div>` : ""}
-        <div class="field-wrap"><label class="field">Which one? (only if this room has two)</label>${chipRow("qualifier", QUALIFIERS, d.qualifier)}<p class="hint">Use this when the room has more than one of the same kind of light, e.g. Island and Sink cans. The name chips are these tags.</p></div>
-        ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Switch type</label>${chipRow("kindOverride", ["Dimmer","On/off","Fan","Not sure if dimmable"], kindChipLabel(d.kindOverride || useKind || "dimmer"))}<p class="hint">Filled in from what the switch controls. Tap once to change. Not sure if dimmable still orders a dimmer.</p></div>` : ""}
-        ${useKind === "fan" && !d.loggedDumb ? `<div class="field-wrap"><label class="field">Fan type</label>${chipRow("fanType", FAN_TYPES, fanTypeLabel(d.fanType))}<p class="hint">AC uses a fan switch. DC uses an on/off (constant power); speed via fan remote/integration. Not sure is listed under Verify on site and stays off the order until you choose.</p></div>` : ""}
+        ${isMultiFixture(d.load) ? (state.fixtureOpen ? `<div class="field-wrap" id="fixtureWrap">${fieldHead("Fixtures on this switch", "fixture", "Optional. How many fixtures this switch controls, e.g. 6 cans. Used only for a wattage warning at high counts, and a flicker/bypass note for 1–2 small LEDs on Inovelli without a neutral.")}${chipRow("fixtureCount", ["1","2","3","4","5","6","7","8","8+"], (d.fixtureMany || Number(d.fixtureCount) > 8) ? "8+" : (d.fixtureCount ? String(d.fixtureCount) : ""))}${(d.fixtureMany || Number(d.fixtureCount) > 8) ? `<input type="number" data-field="fixtureCount" inputmode="numeric" min="9" step="1" value="${esc(String(d.fixtureCount || ""))}" placeholder="9 or more">` : ""}<button type="button" class="fixture-add" id="fixtureHide">Hide fixture count</button></div>` : `<button type="button" class="fixture-add" id="fixtureOpen">+ fixture count</button>`) : ""}
+        <div class="field-wrap">${fieldHead("Which one? (only if this room has two)", "qualifier", "Use this when the room has more than one of the same kind of light, e.g. Island and Sink cans. The name chips are these tags.")}${chipRow("qualifier", QUALIFIERS, d.qualifier)}</div>
+        ${!d.loggedDumb ? `<div class="field-wrap">${fieldHead("Switch type", "kind", "Filled in from what the switch controls. Tap once to change. Not sure if dimmable still orders a dimmer.")}${chipRow("kindOverride", ["Dimmer","On/off","Fan","Not sure if dimmable"], kindChipLabel(d.kindOverride || useKind || "dimmer"))}</div>` : ""}
+        ${useKind === "fan" && !d.loggedDumb ? `<div class="field-wrap">${fieldHead("Fan type", "fan", "AC uses a fan switch. DC uses an on/off (constant power); speed via fan remote/integration. Not sure is listed under Verify on site and stays off the order until you choose.")}${chipRow("fanType", FAN_TYPES, fanTypeLabel(d.fanType))}</div>` : ""}
         ${d.load ? `<div class="auto">${esc(preview)} · ${esc(orderHint(d, useKind))}.${badgeHtml(draftOthers(home, d))}</div>` : ""}
-        <button type="button" class="btn" id="moreToggle">${state.moreOpen ? "Hide more" : "More"}</button>
-        <div id="more" class="${state.moreOpen ? "" : "hidden"}" style="margin-top:12px">
-          ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Also controlled from, optional</label>${chipRow("otherSpots", ["None","1 other spot (3-way)","2 other spots (4-way)"], otherSpotsLabel(draftOthers(home, d)))}<p class="hint">Skip this if you will log every switch. Use it only when the other end will not be logged. Linking later does not double-count.</p></div>` : ""}
-          ${!d.loggedDumb ? `<div class="field-wrap"><label class="field">Where is this switch? optional</label>${chipRow("location", LOCATIONS, d.location)}<p class="hint">Optional. Tells two switches for the same light apart, e.g. top of stairs vs bottom.</p></div>` : ""}
-          ${!d.loggedDumb && d.location==="Other" ? `<div class="field-wrap"><label class="field">Custom location</label><input type="text" data-field="locationOther" value="${esc(d.locationOther)}" placeholder="Landing"></div>` : ""}
-          <div class="field-wrap"><label class="field">Switches in this box</label>${chipRow("gangSize", ["1","2","3","4"], String(d.gangSize))}<p class="hint">How many switches share this wall box, including this one. Most are just one.</p></div>
-          ${d.gangSize > 1 ? `<div class="field-wrap"><label class="field">Which slot, left to right?</label>${chipRow("gangPosition", Array.from({length:d.gangSize},(_,i)=>String(i+1)), String(d.gangPosition))}<p class="hint">Count from the left as you face the wall.</p></div>` : ""}
-          <div class="field-wrap"><label class="field">Note, optional</label><textarea data-field="note" placeholder="Traveler colors, leftover questions">${esc(d.note)}</textarea></div>
+        <div id="more" class="${state.moreOpen ? "" : "hidden"}" style="margin-top:8px">
+          ${!d.loggedDumb ? `<div class="field-wrap">${fieldHead("Also controlled from, optional", "otherSpots", "Skip this if you will log every switch. Use it only when the other end will not be logged. Linking later does not double-count.")}${chipRow("otherSpots", ["None","1 other spot (3-way)","2 other spots (4-way)"], otherSpotsLabel(draftOthers(home, d)))}</div>` : ""}
+          ${!d.loggedDumb ? `<div class="field-wrap">${fieldHead("Where is this switch? optional", "location", "Optional. Tells two switches for the same light apart, e.g. top of stairs vs bottom.")}${chipRow("location", LOCATIONS, d.location)}</div>` : ""}
+          ${!d.loggedDumb && d.location==="Other" ? `<div class="field-wrap">${fieldHead("Custom location")}<input type="text" data-field="locationOther" value="${esc(d.locationOther)}" placeholder="Landing"></div>` : ""}
+          <div class="field-wrap">${fieldHead("Switches in this box", "gang", "How many switches share this wall box, including this one. Most are just one.")}${chipRow("gangSize", ["1","2","3","4"], String(d.gangSize))}</div>
+          ${d.gangSize > 1 ? `<div class="field-wrap">${fieldHead("Which slot, left to right?", "slot", "Count from the left as you face the wall.")}${chipRow("gangPosition", Array.from({length:d.gangSize},(_,i)=>String(i+1)), String(d.gangPosition))}</div>` : ""}
+          <div class="field-wrap">${fieldHead("Note, optional")}<textarea data-field="note" placeholder="Traveler colors, leftover questions">${esc(d.note)}</textarea></div>
         </div>
-        <div class="stack" style="margin-top:12px">
-          <button type="button" class="btn" id="logDumb">Leave as a regular switch</button>
+        <div class="stack" style="margin-top:8px">
+          <div class="row">
+            <button type="button" class="btn" id="moreToggle">${state.moreOpen ? "Hide more" : "More"}</button>
+            <button type="button" class="btn" id="logDumb">Regular switch</button>
+          </div>
           <button type="button" class="btn primary" id="saveSw">${d.editId ? (d.loggedDumb ? "Save as a smart switch" : "Save changes") : "Save switch"}</button>
           <div class="row">
-            <button type="button" class="btn" id="clearDraft">Clear for next switch</button>
+            <button type="button" class="btn quiet" id="clearDraft">Clear for next</button>
             ${d.editId ? `<button type="button" class="btn danger" id="deleteSw">Delete switch</button>` : ""}
           </div>
         </div>
@@ -1002,7 +1113,7 @@
   }
   function renderSavedLists(home) {
     if (!home.switches.length) { const empty = document.createElement("div"); return empty; }
-    let html = `<div class="card"><h2>Logged switches</h2><p class="hint">In the order you saved them. Switches for the same light are grouped automatically and show a 3-way or 4-way badge.</p><div class="stack">`;
+    let html = `<div class="card">${headingInfo("Survey order", "surveyOrder", "In the order you saved them. Switches for the same light are grouped automatically and show a 3-way or 4-way badge.")}<div class="stack">`;
     home.switches.forEach((s, i) => {
       const others = effectiveOthers(s, home);
       const badge = isSmart(s) ? badgeHtml(others) : "";
@@ -1027,8 +1138,8 @@
       : neu === "unknown" ? "Not sure about neutrals. Change"
       : "Older house without neutrals? Change";
     const chips = `<div class="chips" data-field="neutrals">` + NEUTRALS.map((n) => `<button type="button" class="chip" data-value="${n.value}" aria-pressed="${neu===n.value?"true":"false"}">${esc(n.label)}</button>`).join("") + `</div>`;
-    const soft = neu === "yes" ? `<p class="hint">Assumes boxes have a neutral, which most homes built since the 1980s do. If a box has no white wire bundle, flag it.</p>` : "";
-    return `<details class="neutrals-override"${neu !== "yes" ? " open" : ""}><summary>${esc(summary)}</summary><div class="field-wrap" style="margin-top:10px"><label class="field">Neutrals in this house</label>${chips}<p class="hint">A neutral is usually a white wire in the box. You do not need one at every switch.</p></div></details>${soft}`;
+    const soft = neu === "yes" ? fieldHead("Assumes boxes have a neutral", "neutralsYes", "Assumes boxes have a neutral, which most homes built since the 1980s do. If a box has no white wire bundle, flag it.") : "";
+    return `<details class="neutrals-override"${neu !== "yes" ? " open" : ""}><summary>${esc(summary)}</summary><div class="field-wrap" style="margin-top:8px">${fieldHead("Neutrals in this house", "neutralsWhat", "A neutral is usually a white wire in the box. You do not need one at every switch.")}${chips}</div></details>${soft}`;
   }
   function groupMembersOf(home, group) {
     if (group.id && home.switches.some((s) => s.groupId === group.id)) return home.switches.filter((s) => s.groupId === group.id);
@@ -1110,7 +1221,7 @@
       return `<div class="field-wrap"><p><strong>${esc(listLabel(s, home))}</strong><br><span class="sub">${esc(locPair(s.floor, roomNameOf(s, home)))}</span></p><select data-merge-from="${s.id}"><option value="">Merge with…</option>` + cands.map((c) => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join("") + `</select></div>`;
     }).filter(Boolean);
     if (!blocks.length) return "";
-    return `<div class="card"><h2>Merge switches</h2><p class="hint">If two switches control the same light but were not grouped, merge them here.</p>${blocks.join("")}</div>`;
+    return `<div class="card">${headingInfo("Merge switches", "merge", "If two switches control the same light but were not grouped, merge them here.")}${blocks.join("")}</div>`;
   }
   function renderSummary(home) {
     const { s, rows, notes } = orderRows(home);
@@ -1118,8 +1229,7 @@
     const frag = document.createElement("div");
     frag.innerHTML = `
       <div class="card"><label class="field">Home name</label><input type="text" id="homeName" placeholder="Name this house" value="${esc(home.name)}" autocomplete="off">
-        <div class="field-wrap" style="margin-top:12px"><label class="field">Brand</label>${chipRow("brand", BRANDS, brandVal)}</div>
-        <p class="hint">Walk stays brand-neutral. Pick a brand when you are ready to order.</p>
+        <div class="field-wrap" style="margin-top:8px">${fieldHead("Brand", "brand", "Survey stays brand-neutral. Pick a brand when you are ready to order.")}${chipRow("brand", BRANDS, brandVal)}</div>
         ${neutralsOverrideHtml(home)}
         </div>
       <div class="summary-grid">
@@ -1127,11 +1237,11 @@
         <table><thead><tr><th>Item</th><th>Qty</th><th>Part</th></tr></thead>
         <tbody>${rows.length ? rows.map((r)=>`<tr><td>${esc(r.item)}</td><td>${r.qty}</td><td>${esc(r.part)}</td></tr>`).join("") : "<tr><td colspan=3>None yet</td></tr>"}</tbody></table>
         ${notes && notes.length ? notes.map((n)=>`<p class="hint">${esc(n)}</p>`).join("") : ""}
-        ${s.companion ? `<p class="hint">Companions are the extra switches in a 3-way or 4-way. Only one smart main is needed per light.</p>` : ""}
+        ${s.companion ? fieldHead("Companions", "companions", "Companions are the extra switches in a 3-way or 4-way. Only one smart main is needed per light.") : ""}
         <p class="hint">${s.dumb} regular (not smart) switch${s.dumb===1?"":"es"} (not ordered). ${s.locations} location${s.locations===1?"":"s"} logged.</p></div>
       <div class="summary-side">
       ${s.verifyOnSite && s.verifyOnSite.length ? `<div class="card"><h2>Verify on site</h2>${s.verifyOnSite.map((v)=>`<p><strong>${esc(v.name)}</strong><br><span class="sub">${esc(v.floor)} ${esc(v.room)} · ${esc(v.why)}</span></p>`).join("")}</div>` : ""}
-      ${s.groups.length ? `<div class="card"><h2>3-way and 4-way</h2>${s.groups.map((g)=>summaryGroupHtml(g, home)).join("")}<p class="hint">Detected automatically from the same light. A 3-way is two locations (1 smart switch + 1 companion). A 4-way is three locations (1 smart switch + 2 companions). Unlink or merge here if a group is wrong. “Main” is a starting guess for the smart switch.</p></div>` : ""}
+      ${s.groups.length ? `<div class="card">${headingInfo("3-way and 4-way", "groups", "Detected automatically from the same light. A 3-way is two locations (1 smart switch + 1 companion). A 4-way is three locations (1 smart switch + 2 companions). Unlink or merge here if a group is wrong. “Main” is a starting guess for the smart switch.")}${s.groups.map((g)=>summaryGroupHtml(g, home)).join("")}</div>` : ""}
       ${ungroupedMergeHtml(home)}
       ${s.issues.length ? `<div class="card"><h2>Open issues</h2>${s.issues.map((i)=>`<p>${esc(i)}</p>`).join("")}</div>` : ""}
       <div class="card"><h2>Export this home</h2><div class="stack">
@@ -1146,8 +1256,7 @@
   function renderHomes(home) {
     const frag = document.createElement("div");
     frag.innerHTML = `
-      <div class="card"><h2>Homes</h2>
-        <p class="hint">Each home is a separate survey, saved only on this phone. Exports are per home unless you export all JSON.</p>
+      <div class="card">${headingInfo("Homes", "homes", "Each home is a separate survey, saved only on this phone. Exports are per home unless you export all JSON.")}
         <div class="home-list">${state.store.homes.map((h) => `<button type="button" class="list-item" data-select-home="${h.id}"><strong>${esc(h.name || "Untitled home")}${h.isExample?" (example)":""}</strong><span>${h.switches.length} location${h.switches.length===1?"":"s"}</span></button>`).join("")}</div>
       </div>
       <div class="card"><label class="field">New home name</label><input type="text" id="newHomeName" placeholder="Another house" autocomplete="off">
@@ -1165,8 +1274,7 @@
         <button type="button" class="btn" id="shareBtn">Copy / Share this home</button>
         <label class="field">Import JSON</label><input type="file" id="importFile" accept="application/json,.json">
       </div></div>
-      <div class="card"><h2>PIN</h2>
-        <p class="hint">Change your PIN while unlocked. Forgot PIN is on the lock screen and erases data on this phone unless you already have a backup.</p>
+      <div class="card">${headingInfo("PIN", "pin", "Change your PIN while unlocked. Forgot PIN is on the lock screen and erases data on this phone unless you already have a backup.")}
         <button type="button" class="btn" id="changePin">Change PIN</button>
       </div>`;
     return frag;
@@ -1281,6 +1389,14 @@
     });
     document.querySelectorAll("[data-pick-light]").forEach((b) => b.addEventListener("click", () => pickExistingLight(b.getAttribute("data-pick-light"))));
     document.getElementById("moreToggle")?.addEventListener("click", () => { state.moreOpen = !state.moreOpen; render(); });
+    document.getElementById("fixtureOpen")?.addEventListener("click", () => { state.fixtureOpen = true; render(); });
+    document.getElementById("fixtureHide")?.addEventListener("click", () => { state.fixtureOpen = false; render(); });
+    document.querySelectorAll("[data-toggle-hint]").forEach((b) => b.addEventListener("click", () => {
+      const id = b.getAttribute("data-toggle-hint");
+      state.openHints = state.openHints || {};
+      state.openHints[id] = !state.openHints[id];
+      render();
+    }));
     document.getElementById("newLight")?.addEventListener("click", () => {
       const p = state.pendingMatch; if (!p) return;
       const home = homeOf();
@@ -1363,6 +1479,13 @@
       } else {
         state.draft.fixtureMany = false;
         state.draft.fixtureCount = value;
+      }
+    }
+    else if (field === "floor") {
+      state.draft.floor = value;
+      if (state.draft.room && state.draft.room !== "Other" && !isListedRoom(value, state.draft.room)) {
+        state.draft.room = "";
+        state.draft.roomOther = "";
       }
     }
     else state.draft[field] = value;
@@ -1540,6 +1663,7 @@
     state.draft.roomOther = d.roomOther;
     state.pendingMatch = null;
     state.moreOpen = false;
+    state.fixtureOpen = false;
     persist(); render();
   }
   function editSwitch(id) {
@@ -1547,9 +1671,10 @@
     const sw = home.switches.find((s) => s.id === id); if (!sw) return;
     const room = roomNameOf(sw, home);
     state.tab = "walk";
+    state.fixtureOpen = fixtureCountOf(sw) > 0;
     state.draft = {
-      editId: sw.id, floor: sw.floor, room: ROOMS.includes(room) ? room : "Other",
-      roomOther: ROOMS.includes(room) ? "" : room, load: sw.load, loadOther: sw.loadOther || "",
+      editId: sw.id, floor: sw.floor, room: isListedRoom(sw.floor, room) ? room : "Other",
+      roomOther: isListedRoom(sw.floor, room) ? "" : room, load: sw.load, loadOther: sw.loadOther || "",
       qualifier: sw.qualifier || "", location: LOCATIONS.includes(sw.location) ? sw.location : (sw.location ? "Other" : ""),
       locationOther: LOCATIONS.includes(sw.location) ? "" : (locLabel(sw)),
       gangSize: sw.gangSize, gangPosition: sw.gangPosition, loggedDumb: sw.loggedDumb,
@@ -1557,8 +1682,8 @@
       fixtureCount: fixtureCountOf(sw) || "", fixtureMany: fixtureCountOf(sw) > 8, pickedLightId: sw.groupId ? ((home.switches.find((s) => s.groupId === sw.groupId) || sw).id) : "", lightFilter: "",
       lightElsewhere: lightIsElsewhere(sw, home),
       lightFloor: sw.lightFloor || "",
-      lightRoom: (sw.lightRoom && ROOMS.includes(sw.lightRoom)) ? sw.lightRoom : (sw.lightRoom ? "Other" : ""),
-      lightRoomOther: (sw.lightRoom && !ROOMS.includes(sw.lightRoom)) ? sw.lightRoom : "",
+      lightRoom: (sw.lightRoom && isListedRoom(sw.lightFloor || sw.floor, sw.lightRoom)) ? sw.lightRoom : (sw.lightRoom ? "Other" : ""),
+      lightRoomOther: (sw.lightRoom && !isListedRoom(sw.lightFloor || sw.floor, sw.lightRoom)) ? sw.lightRoom : "",
       groupId: sw.groupId || ""
     };
     state.moreOpen = Boolean(sw.note || Number(sw.gangSize) > 1 || Number(sw.gangPosition) > 1 || (!sw.groupId && Number(sw.otherSpots) > 0) || sw.location);

@@ -105,3 +105,15 @@ Brand notes stay accurate against the manufacturer docs: Inovelli Blue and Red d
 
 `verify_scenarios.py` S13 walks one regular dimmer, three not-sure dimmers, and one closet on/off, and asserts the order sheet, the exact note, the brand wording, and CSV/JSON.
 
+## 2026-11-24 — Floor-specific rooms, Survey tab, hidden hints, fixture count
+
+**Exterior** and **Basement** are no longer rooms. They are only floors, and the room list follows the floor you pick. Interior floors use the indoor rooms, A–Z. The Exterior floor shows outdoor spots, A–Z: Back patio, Deck, Driveway, Front porch, Garage exterior, Landscape, Side door, and Other. Basement adds **Main area** and **Utility** to the indoor list. Rooms stay the switch location.
+
+Saved surveys are migrated: a room named Exterior becomes a sensible outdoor spot (or Other) on the Exterior floor; a room named Basement becomes **Main area** on the Basement floor. The example house now logs driveway floods and landscape lights under Exterior. Labels and the order sheet use `locPair` so a floor is not repeated in the name (no “Exterior Exterior”). Light-name chips still include the floor when it isn’t already in the room name, for example **Exterior Front porch floods** or **Garage exterior floods**.
+
+The **Walk** tab and other user-facing “walk” wording are now **Survey** (the tab key is unchanged). The saved-switch list is **Survey order**.
+
+Hint and description paragraphs are no longer always on screen. A small **i** icon next to the label reveals the text; it starts closed. Only the essential one-line labels stay visible. The same pattern is used on Summary. Spacing on the survey form is tighter so a full entry (floor, room, load, type, Save) fits on a 393×852 phone: Save is on screen without scrolling; about 86px of overflow is the Clear row below.
+
+**How many?** is gone from the main form. For multi-fixture loads, a small **+ fixture count** control opens an optional **Fixtures on this switch** row (for example 6 cans). The stored key is still `fixtureCount`. It does not change what is ordered. The order sheet uses it only for the wattage-limit warning at high counts (6 or more) and, when the brand is Inovelli and the house has no neutrals, a flicker/bypass note for 1–2 small LEDs. S8 uses this collapsed control.
+

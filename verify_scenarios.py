@@ -101,7 +101,17 @@ async def set_kind(page, label):
 
 UNSURE_DIMMABLE_NOTE = "Not sure if dimmable: set to on/off mode if the bulbs don't dim, or swap to dimmable LEDs."
 
+async def open_hint(page, hint_id):
+    btn = page.locator(f'[data-toggle-hint="{hint_id}"]')
+    if await btn.count() and (await btn.get_attribute("aria-expanded")) != "true":
+        await btn.click()
+        await page.wait_for_timeout(60)
+
 async def set_fixture(page, n):
+    if await page.locator("#fixtureOpen").count():
+        await page.click("#fixtureOpen")
+        await page.wait_for_timeout(60)
+    await page.wait_for_selector('[data-field="fixtureCount"]')
     if n > 8:
         await page.click('[data-field="fixtureCount"] .chip[data-value="8+"]')
         await page.wait_for_selector('input[data-field="fixtureCount"]')
@@ -234,10 +244,55 @@ async def run():
         await press_pin(page, PIN, confirm=True)
         await page.wait_for_selector("[data-tab='walk']")
         body = await page.inner_text("body")
-        check("no yes/no light question on main walk", "Is the light in this room?" not in body and "Light is in a different room" not in body and "Where is the light?" not in body)
+        check("Survey tab label", (await page.locator('[data-tab="walk"]').inner_text()).strip() == "Survey")
+        check("no yes/no light question on main survey", "Is the light in this room?" not in body and "Light is in a different room" not in body and "Where is the light?" not in body)
+        await open_hint(page, "addSwitch")
+        body = await page.inner_text("body")
+        check("intro is Survey every switch in order", "Survey every switch in order" in body)
         check("intro mentions tap name under Load", "tap its name under Load" in body)
         check("Which one? has Island/Sink/#2 tags", "Island" in body and "Sink" in body and "#2" in body)
         check("Switch type has Not sure if dimmable", "Not sure if dimmable" in body)
+        check("fixture count is not on the main form", await page.locator("#fixtureOpen").count() == 0 and "Fixtures on this switch" not in body)
+
+        # Exterior floor switches the room list to outdoor spots
+        await page.click('[data-field="floor"] .chip[data-value="Exterior"]')
+        await page.wait_for_timeout(80)
+        opts = await page.locator("select[data-field='room'] option").all_text_contents()
+        check("Exterior rooms are outdoor spots",
+              "Front porch" in opts and "Driveway" in opts and "Back patio" in opts and "Deck" in opts
+              and "Garage exterior" in opts and "Landscape" in opts and "Side door" in opts and "Other" in opts
+              and "Kitchen" not in opts and "Hall" not in opts and "Basement" not in opts and opts.count("Exterior") == 0,
+              opts)
+        await shot(page, "393-dark-exterior-rooms.png")
+        await page.click('[data-field="floor"] .chip[data-value="Main"]')
+        await page.wait_for_timeout(80)
+        # Close the intro hint and wait out the PIN flash so the measure is a typical entry.
+        btn = page.locator('[data-toggle-hint="addSwitch"]')
+        if await btn.count() and (await btn.get_attribute("aria-expanded")) == "true":
+            await btn.click()
+            await page.wait_for_timeout(60)
+        flash = page.locator(".banner")
+        if await flash.count():
+            await flash.wait_for(state="hidden", timeout=6000)
+        await pick_room_load(page, "Kitchen", "Can lights")
+        metrics = await page.evaluate("""() => {
+          const save = document.getElementById('saveSw');
+          const r = save ? save.getBoundingClientRect() : null;
+          return {
+            scrollHeight: document.documentElement.scrollHeight,
+            clientHeight: document.documentElement.clientHeight,
+            innerHeight: window.innerHeight,
+            saveBottom: r ? r.bottom : null,
+            saveTop: r ? r.top : null
+          };
+        }""")
+        overflow = max(0, int(metrics["scrollHeight"]) - int(metrics["clientHeight"]))
+        save_in_view = metrics["saveBottom"] is not None and metrics["saveBottom"] <= metrics["innerHeight"] + 1
+        check("393x852 form: Save is in view without scrolling", save_in_view,
+              f"saveBottom={metrics['saveBottom']} innerHeight={metrics['innerHeight']} overflow={overflow}px {metrics}")
+        results["formFit"] = {**metrics, "overflowPx": overflow, "saveInView": save_in_view}
+        print("FORM FIT 393x852", results["formFit"])
+        await shot(page, "393-dark-survey-form.png")
 
         # 1. Simple room + 3-gang box
         await goto_walk_new_home(page, "S1 Simple and 3-gang")
@@ -379,17 +434,18 @@ async def run():
         check("S7 DC constant-power note", "DC" in body and "constant power" in body.lower())
         check("S7 verify-on-site names the unsure fan", "Verify on site" in body and "Primary bedroom" in body)
 
-        # 8. Regular switch + How many? 6 and 8+
+        # 8. Regular switch + optional fixture count 6 and 8+
         await goto_walk_new_home(page, "S8 Regular and fixture counts")
         await pick_room_load(page, "Closet", "Closet light")
         await log_dumb(page)
         await pick_room_load(page, "Hall", "Can lights")
+        check("S8 fixture count starts collapsed", await page.locator("#fixtureOpen").count() > 0)
         await set_fixture(page, 6)
         await save(page)
         await pick_room_load(page, "Living room", "Can lights")
         await set_fixture(page, 10)
         await save(page)
-        ok, actual, body = await assert_order(page, "S8 regular + How many 6 and 8+", {
+        ok, actual, body = await assert_order(page, "S8 regular + fixture count 6 and 8+", {
             "dimmer": 2, "onoff": 0, "fan": 0, "companion": 0, "dumb": 1,
             "plates": {1: 2}, "locations": 3, "verify": 0, "wattage": True
         })
@@ -631,6 +687,14 @@ async def run():
         body = await page.inner_text("body")
         check("light summary shows not-sure count and note", "3 dimmers marked not-sure-dimmable" in body and UNSURE_DIMMABLE_NOTE in body)
         await shot(page, "393-light-summary-unsure.png")
+
+        await page.click("[data-tab='walk']")
+        await page.wait_for_timeout(80)
+        await page.click('[data-field="floor"] .chip[data-value="Exterior"]')
+        await page.wait_for_timeout(80)
+        opts = await page.locator("select[data-field='room'] option").all_text_contents()
+        check("light Exterior rooms are outdoor spots", "Front porch" in opts and "Kitchen" not in opts, opts)
+        await shot(page, "393-light-exterior-rooms.png")
 
         # clear
         await page.reload(wait_until="load")
