@@ -49,7 +49,7 @@ async def run():
         await page.goto(BASE, wait_until="load")
         await page.wait_for_selector("#loadQuery", timeout=15000)
         ver = await page.evaluate("() => (window.__ss && __ss.appVersion && __ss.appVersion()) || (document.querySelector('meta[name=\\'ss-version\\']') || {}).content")
-        check("version is 2026-11-24i", ver == "2026-11-24i", ver)
+        check("version is 2026-11-24j", ver == "2026-11-24j", ver)
 
         # What it controls
         load_el = page.locator("#loadQuery")
@@ -64,6 +64,15 @@ async def run():
         await type_sentence(page, room_el, room, "Room name",
                             "() => document.activeElement && document.activeElement.getAttribute('data-field') === 'roomOther'")
         await shot(page, "393-dark-typing-room-other.png")
+
+        # Light is in — custom (select may rerender once; typing must not)
+        await page.select_option("#lightPlace", "Other")
+        await page.wait_for_selector("input[data-field='lightRoomOther']")
+        light_el = page.locator("input[data-field='lightRoomOther']")
+        custom_light = "Bonus room at the back."
+        await type_sentence(page, light_el, custom_light, "Light is in custom name",
+                            "() => document.activeElement && document.activeElement.getAttribute('data-field') === 'lightRoomOther'")
+        await shot(page, "393-dark-typing-light-place.png")
 
         # Note under More
         if await page.locator("textarea[data-field='note']").count() == 0 or not await page.locator("textarea[data-field='note']").is_visible():

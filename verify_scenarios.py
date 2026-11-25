@@ -2,7 +2,7 @@
 import asyncio, json, os, re, sys
 from pathlib import Path
 from playwright.async_api import async_playwright
-from verify_helpers import choose_load, pick_existing_light, open_more, set_other_spots, show_parts
+from verify_helpers import choose_load, pick_existing_light, open_more, set_other_spots, show_parts, set_light_place
 
 BASE = os.environ.get("SS_BASE", "http://127.0.0.1:8773/index.html")
 OUT = Path(os.environ.get("SS_OUT", "/workspace/switch-survey/verify/scenarios"))
@@ -222,6 +222,9 @@ async def run():
               load_opts)
         check("Accent lights is in the type list", "Accent lights" in load_opts)
         check("Ring camera is in the type list", "Ring camera" in load_opts)
+        check("Light is in is on the first-launch form", await page.locator("#lightPlace").count() > 0 and "Light is in" in body)
+        same_opt = await page.locator("#lightPlace option[value='same']").text_content()
+        check("Light is in defaults to same as the switch", (same_opt or "").strip().lower().startswith("same as") or "same as switch" in (same_opt or "").lower(), same_opt)
         check("Also controlled from is gone", "Also controlled from" not in body and "Doorway or wall" not in body and "Lights already logged" not in body)
         save_box = await page.locator("#saveSw").bounding_box()
         check("Save fits on 393x852 with gang visible", bool(save_box) and save_box["y"] + save_box["height"] <= 852, save_box)
@@ -305,7 +308,7 @@ async def run():
         await pick_room_load(page, "Stairs", "Can lights", floor="Main")
         await page.locator("#loadQuery").click()
         await page.wait_for_timeout(80)
-        check("S2 shows Upper Hall suggestion", "Same light as Can lights (Upper Hall)" in (await page.inner_text("body")))
+        check("S2 shows Upper Hall suggestion", "Same light as Can lights (in Upper Hall)" in (await page.inner_text("body")))
         await page.locator("h1").click()
         await page.wait_for_timeout(80)
         await pick_existing_light(page, "Upper Hall")
@@ -354,13 +357,13 @@ async def run():
         await pick_room_load(page, "Foyer", "Can lights")
         await page.locator("#loadQuery").click()
         await page.wait_for_timeout(80)
-        check("S4 shows Hall suggestion", "Same light as Can lights (Hall)" in (await page.inner_text("body")))
+        check("S4 shows Hall suggestion", "Same light as Can lights (in Hall)" in (await page.inner_text("body")))
         await page.locator("h1").click()
         await page.wait_for_timeout(80)
-        await pick_existing_light(page, "Same light as Can lights (Hall")
+        await pick_existing_light(page, "Same light as Can lights (in Hall")
         await save(page)
         await pick_room_load(page, "Living room", "Can lights")
-        await pick_existing_light(page, "Same light as Can lights (Hall")
+        await pick_existing_light(page, "Same light as Can lights (in Hall")
         await save(page)
         await assert_order(page, "S4 4-way hall", {
             "dimmer": 1, "onoff": 0, "fan": 0, "companion": 2, "dumb": 0,
@@ -408,7 +411,7 @@ async def run():
         same = page.locator("#sameLightSuggest [data-pick-light]")
         check("picking a type from the dropdown shows Same light as chips", await same.count() > 0 and await same.first.is_visible())
         body = await page.inner_text("#sameLightSuggest")
-        check("same-light chip names the room", "Same light as Can lights (Kitchen)" in body)
+        check("same-light chip names the room", "Same light as Can lights (in Kitchen)" in body)
         await shot(page, "393-dark-same-light-after-chip.png")
         await page.click("#clearDraft")
         await page.wait_for_timeout(80)
@@ -416,7 +419,7 @@ async def run():
         await page.locator("#loadQuery").fill("can")
         await page.wait_for_timeout(150)
         check("typing a load type shows Same light as chips",
-              "Same light as Can lights (Kitchen)" in (await page.inner_text("#sameLightSuggest")))
+              "Same light as Can lights (in Kitchen)" in (await page.inner_text("#sameLightSuggest")))
         await shot(page, "393-dark-same-light-after-type.png")
         await page.emulate_media(color_scheme="light")
         await page.wait_for_timeout(80)
@@ -960,6 +963,134 @@ async def run():
         await page.emulate_media(color_scheme="light")
         await page.wait_for_timeout(80)
         await shot(page, "393-light-ring-camera-install.png")
+        await page.emulate_media(color_scheme="dark")
+        await page.wait_for_timeout(80)
+
+
+        # 17. Light is in: Hall switch controlling Kitchen cans
+        await goto_walk_new_home(page, "S17 Light location")
+        await page.set_viewport_size({"width": 393, "height": 852})
+        check("S17 Light is in is on the form", await page.locator("#lightPlace").count() > 0)
+        await pick_room_load(page, "Kitchen", "Can lights")
+        same_opt = await page.locator("#lightPlace option[value='same']").text_content()
+        check("S17 defaults to Kitchen (same as switch)", "Kitchen" in (same_opt or "") and "same as switch" in (same_opt or "").lower(), same_opt)
+        check("S17 Yard is in the Outside options", await page.locator("#lightPlace option[value='Exterior|Yard']").count() > 0)
+        check("S17 Front porch is in the Outside options", await page.locator("#lightPlace option[value='Exterior|Front porch']").count() > 0)
+        await save(page)
+        await pick_room_load(page, "Hall", "Can lights")
+        same_opt = await page.locator("#lightPlace option[value='same']").text_content()
+        check("S17 Hall switch still defaults to Hall", "Hall" in (same_opt or "") and "same as switch" in (same_opt or "").lower(), same_opt)
+        await set_light_place(page, "Kitchen")
+        check("S17 Light is in can be changed to Kitchen in one tap", (await page.locator("#lightPlace").input_value()) == "Main|Kitchen")
+        body = await page.inner_text("body")
+        check("S17 preview names the light in Kitchen", "in Kitchen" in body, body[-400:])
+        await save(page)
+        # explicit light location + exact match may auto-join or prompt Same/New
+        if await has_same_or_new(page):
+            await click_same_light(page, "Kitchen")
+        body = await page.inner_text("body")
+        check("S17 Hall switch groups with Kitchen cans", "3-way" in body or "Linked as a 3-way" in body, body[-500:])
+        check("S17 survey order says Can lights (in Kitchen)", "Can lights (in Kitchen)" in body)
+        await page.click("[data-tab='summary']")
+        await page.wait_for_timeout(200)
+        body = await page.inner_text("body")
+        check("S17 install list flags Can lights (in Kitchen)", "Can lights (in Kitchen)" in body)
+        q = await qty_on(page)
+        check("S17 parts are 1 dimmer + 1 companion, not two dimmers",
+              q.get("Smart dimmer", 0) == 1 and q.get("Companion", 0) == 1, q)
+        await shot(page, "393-dark-light-in-kitchen.png")
+        async with page.expect_download() as dl:
+            await page.click("#exportInstallCsv")
+        csvp = OUT / "s17-light-in-install.csv"
+        await (await dl.value).save_as(str(csvp))
+        csv = csvp.read_text(encoding="utf-8")
+        check("S17 install CSV has Can lights (in Kitchen)", "Can lights (in Kitchen)" in csv, csv[:800])
+        # Exterior label
+        await page.click("[data-tab='walk']")
+        await page.wait_for_timeout(80)
+        await pick_room_load(page, "Hall", "Exterior lights")
+        await set_light_place(page, "Front porch", floor="Exterior")
+        body = await page.inner_text("body")
+        check("S17 porch preview uses Outside, Front porch", "Outside, Front porch" in body, body[-400:])
+        await save(page)
+        body = await page.inner_text("body")
+        check("S17 survey lists Exterior lights (Outside, Front porch)", "Exterior lights (Outside, Front porch)" in body, body[-600:])
+        await page.click("[data-tab='summary']")
+        await page.wait_for_timeout(200)
+        await page.emulate_media(color_scheme="light")
+        await page.wait_for_timeout(80)
+        body = await page.inner_text("body")
+        check("S17 light theme install list has in Kitchen", "Can lights (in Kitchen)" in body)
+        await shot(page, "393-light-light-in-kitchen.png")
+        await page.emulate_media(color_scheme="dark")
+        await page.wait_for_timeout(80)
+
+
+        # 18. Kitchen Chandelier must not auto-pick Family room Chandelier
+        await goto_walk_new_home(page, "S18 Chandelier rooms")
+        await page.set_viewport_size({"width": 393, "height": 852})
+        await pick_room_load(page, "Family room", "Chandelier")
+        await save(page)
+        await pick_room_load(page, "Kitchen", "Chandelier")
+        await page.wait_for_timeout(200)
+        body = await page.inner_text("body")
+        check("S18 shows Same light as Family room Chandelier",
+              "Same light as Chandelier (in Family room)" in body, body[-500:])
+        pressed = await page.locator("[data-pick-light][aria-pressed='true']").count()
+        check("S18 Same light chip is not pre-selected", pressed == 0, pressed)
+        check("S18 New light chip is visible", await page.locator("#suggestNewLight").count() > 0 and await page.locator("#suggestNewLight").is_visible())
+        preview = await page.locator(".auto").inner_text() if await page.locator(".auto").count() else body
+        check("S18 preview does not treat it as the Family room light",
+              "Family room" not in preview and "switch →" not in preview, preview)
+        same_opt = await page.locator("#lightPlace option[value='same']").text_content() if await page.locator("#lightPlace").count() else ""
+        check("S18 Light is in stays Kitchen (same as switch)",
+              "Kitchen" in (same_opt or "") and (await page.locator("#lightPlace").input_value()) == "same", same_opt)
+        await save(page)
+        check("S18 saving without tapping does not prompt Same/New for the other room", not await has_same_or_new(page))
+        body = await page.inner_text("body")
+        check("S18 did not auto-link Kitchen and Family room chandeliers",
+              "3-way" not in body and "Linked as a 3-way" not in body, body[-600:])
+        await page.click("[data-tab='summary']")
+        await page.wait_for_timeout(200)
+        await show_parts(page)
+        q = await qty_on(page)
+        check("S18 two separate dimmers, no companion",
+              q.get("Smart dimmer", 0) == 2 and q.get("Companion", 0) == 0, q)
+        await shot(page, "393-dark-chandelier-not-autolink.png")
+        # Tapping Same light still links when he means it
+        await page.click("[data-tab='walk']")
+        await page.wait_for_timeout(80)
+        await goto_walk_new_home(page, "S18 Chandelier link")
+        await pick_room_load(page, "Family room", "Chandelier")
+        await save(page)
+        await pick_room_load(page, "Kitchen", "Chandelier")
+        await pick_existing_light(page, "Same light as Chandelier (in Family room")
+        body = await page.inner_text("body")
+        check("S18 after tap, preview can name the Family room light", "Family room" in body)
+        await save(page)
+        body = await page.inner_text("body")
+        check("S18 tap Same light still links as a 3-way", "3-way" in body or "Linked as a 3-way" in body)
+        await shot(page, "393-dark-chandelier-tapped-link.png")
+        # New light keeps them separate
+        await goto_walk_new_home(page, "S18 Chandelier new")
+        await pick_room_load(page, "Family room", "Chandelier")
+        await save(page)
+        await pick_room_load(page, "Kitchen", "Chandelier")
+        await page.wait_for_timeout(500)
+        await page.click("#suggestNewLight")
+        await page.wait_for_timeout(200)
+        await save(page)
+        check("S18 New light saves with no Same/New prompt", not await has_same_or_new(page))
+        body = await page.inner_text("body")
+        check("S18 New light did not 3-way", "3-way" not in body and "Linked as a 3-way" not in body)
+        await page.click("[data-tab='summary']")
+        await page.wait_for_timeout(200)
+        q = await qty_on(page)
+        check("S18 New light orders two dimmers",
+              q.get("Smart dimmer", 0) == 2 and q.get("Companion", 0) == 0, q)
+        await page.emulate_media(color_scheme="light")
+        await page.wait_for_timeout(80)
+        await shot(page, "393-light-chandelier-new.png")
         await page.emulate_media(color_scheme="dark")
         await page.wait_for_timeout(80)
 

@@ -15,6 +15,8 @@ async def choose_load(page, load):
     await page.wait_for_timeout(80)
 
 async def pick_existing_light(page, contains):
+    # iOS can deliver a leftover tap onto a newly rendered chip; the app ignores those briefly.
+    await page.wait_for_timeout(500)
     chips = page.locator("[data-pick-light]")
     visible = False
     if await chips.count():
@@ -71,3 +73,18 @@ async def show_parts(page):
     if await btn.count() and (await btn.get_attribute("aria-expanded")) != "true":
         await btn.click()
         await page.wait_for_timeout(100)
+
+
+async def set_light_place(page, room, floor=None):
+    """Set the Light is in dropdown. room is 'same', 'Other', a room name, or a 'Floor|Room' value."""
+    sel = page.locator("#lightPlace")
+    await sel.wait_for(state="visible")
+    if room in ("same", "", None, "Same"):
+        await sel.select_option("same")
+    elif room == "Other":
+        await sel.select_option("Other")
+    elif "|" in room:
+        await sel.select_option(room)
+    else:
+        await sel.select_option((floor or "Main") + "|" + room)
+    await page.wait_for_timeout(80)

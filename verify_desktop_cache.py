@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent
 CURRENT_HTML = (ROOT / "index.html").read_text(encoding="utf-8")
 OLD_PIN_HTML = (ROOT / "verify/fixtures/old-pin-index.html").read_text(encoding="utf-8")
 WEBKIT = "/home/box/.cache/ms-playwright/webkit-2388/pw_run.sh"
-APP_VERSION = "2026-11-24i"
+APP_VERSION = "2026-11-24j"
 _OLD = os.environ.get("SS_TEST_OLD_PIN", "2468")
 results = {"ok": True, "base": BASE, "checks": []}
 DESKTOP = {"width": 1440, "height": 900}
