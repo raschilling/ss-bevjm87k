@@ -13,7 +13,7 @@
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
   <meta name="robots" content="noindex, nofollow, noarchive">
   <meta name="description" content="Private switch survey.">
-  <meta name="ss-version" content="2026-11-24i">
+  <meta name="ss-version" content="2026-11-24j">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -149,12 +149,26 @@
     .same-light-suggest:empty { display: none; }
     .same-light-chip {
       appearance: none; display: inline-flex; align-items: center; width: auto;
-      text-align: left; border: 1.5px solid var(--accent); border-radius: 12px;
-      background: color-mix(in srgb, var(--accent) 12%, var(--paper)); color: var(--ink);
+      text-align: left; border: 1.5px solid var(--line); border-radius: 12px;
+      background: var(--chip); color: var(--ink);
       padding: 6px 10px; min-height: 36px; font: inherit; font-weight: 650; cursor: pointer;
     }
-    .same-light-chip[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 22%, var(--paper)); }
+    .same-light-chip[aria-pressed="true"] {
+      background: color-mix(in srgb, var(--accent) 18%, var(--paper));
+      border-color: var(--accent);
+    }
+    .new-light-chip {
+      border-style: dashed;
+      font-weight: 700;
+    }
     .prompt-card { margin: 8px 0 10px; }
+    #lightPlaceWrap { margin-top: 0; margin-bottom: 6px; }
+    #lightPlaceWrap .light-place-row {
+      display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: center;
+    }
+    #lightPlaceWrap .light-place-row .label-row { margin: 0; }
+    #lightPlaceWrap select { width: 100%; max-width: 100%; min-height: 40px; padding: 6px 10px; }
+    #lightPlaceWrap input { margin-top: 8px; width: 100%; max-width: 100%; box-sizing: border-box; }
     .btn-unlink {
       appearance: none; flex: 0 0 auto; align-self: center;
       min-width: 32px; min-height: 32px; padding: 6px 8px; margin: 0;
@@ -223,11 +237,11 @@
 (() => {
   const META_KEY = "switchSurvey.meta.v1";
   const DATA_KEY = "switchSurvey.data.v2";
-  const APP_VERSION = "2026-11-24i";
+  const APP_VERSION = "2026-11-24j";
   const ITERATIONS = 150000;
   const FLOORS = ["Basement","Main","Upper","Exterior"];
   const INDOOR_ROOMS = ["Bedroom","Closet","Dining room","Family room","Foyer","Garage","Guest bath","Half bath","Hall","Kitchen","Laundry","Living room","Office","Primary bath","Primary bedroom","Stairs","Other"];
-  const EXTERIOR_ROOMS = ["Back patio","Deck","Driveway","Front porch","Garage exterior","Landscape","Side door","Other"];
+  const EXTERIOR_ROOMS = ["Back patio","Deck","Driveway","Front porch","Garage exterior","Landscape","Side door","Yard","Other"];
   const LOADS = ["Accent lights","Can lights","Ceiling fan","Chandelier","Closet light","Exhaust fan","Exterior lights","Fan + light","Flood lights","Lamp outlet","Pendants","Ring camera","Sconces","Under-cabinet","Vanity light","Wafer lights","Other"];
   const UNKNOWN_LOAD = "Unknown";
   const UNKNOWN_LABEL = "Unknown / find out";
@@ -255,7 +269,7 @@
   function uid(prefix) { return prefix + "_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
   function blankHome() { return { id: uid("home"), name: "", brand: "undecided", neutrals: "yes", rooms: [], switches: [], isExample: false }; }
   function emptyDraft(floor, room) {
-    return { editId: "", floor: floor || "Main", room: room || "", roomOther: "", load: "", loadOther: "", qualifier: "", location: "", locationOther: "", gangSize: 1, gangPosition: 1, loggedDumb: false, note: "", kindOverride: "", fanType: "", otherSpots: 0, fixtureCount: "", fixtureMany: false, lightElsewhere: false, lightFloor: "", lightRoom: "", lightRoomOther: "", pickedLightId: "", lightFilter: "", groupId: "" };
+    return { editId: "", floor: floor || "Main", room: room || "", roomOther: "", load: "", loadOther: "", qualifier: "", location: "", locationOther: "", gangSize: 1, gangPosition: 1, loggedDumb: false, note: "", kindOverride: "", fanType: "", otherSpots: 0, fixtureCount: "", fixtureMany: false, lightElsewhere: false, lightFloor: "", lightRoom: "", lightRoomOther: "", pickedLightId: "", intendNewLight: false, lightFilter: "", groupId: "" };
   }
   function defaultStore() { const home = blankHome(); return { version: 1, kind: "ha-switch-survey", homes: [home], activeHomeId: home.id }; }
   function sensibleExteriorSpot(sw) {
@@ -399,10 +413,117 @@
     return home ? roomNameOf(sw, home) : (sw.room || "");
   }
   function lightIsElsewhere(sw, home) {
+    if (!sw) return false;
     const lf = (sw.lightFloor || "").trim();
     const lr = (sw.lightRoom || "").trim();
     if (!lf && !lr) return false;
-    return lightFloorOf(sw) !== (sw.floor || "") || lightRoomOf(sw, home) !== roomNameOf(sw, home);
+    const switchRoom = home ? roomNameOf(sw, home) : (sw.room === "Other" ? (sw.roomOther || "Other") : (sw.room || ""));
+    return lightFloorOf(sw) !== (sw.floor || "") || lightRoomOf(sw, home) !== switchRoom;
+  }
+  function lightWherePhrase(sw, home) {
+    const floor = lightFloorOf(sw);
+    const room = lightRoomOf(sw, home);
+    if (floor === "Exterior") return room && room !== "Exterior" ? ("Outside, " + room) : "Outside";
+    if (!floor || floor === "Main" || floor.toLowerCase() === String(room || "").toLowerCase()) return room || floor || "";
+    return locPair(floor, room) || room || floor || "";
+  }
+  function controlsLabel(sw, home) {
+    const n = fixtureCountOf(sw);
+    const count = n ? " x" + n : "";
+    const tag = sw.qualifier || "";
+    const load = isUnknown(sw) ? "Unknown" : (sw.load === "Other" ? ((sw.loadOther || "Other").trim() || "Other") : (sw.load || ""));
+    const name = [load, tag].filter(Boolean).join(" ") + count;
+    if (!lightIsElsewhere(sw, home)) return name;
+    const where = lightWherePhrase(sw, home);
+    if (!where) return name;
+    if (lightFloorOf(sw) === "Exterior") return name + " (" + where + ")";
+    return name + " (in " + where + ")";
+  }
+  function currentLightPlaceValue(d) {
+    if (!d.lightElsewhere) return "same";
+    if ((d.lightRoom || "") === "Other") return "Other";
+    const lf = d.lightFloor || d.floor;
+    const lr = d.lightRoom || "";
+    if (!lr) return "same";
+    if (lf === d.floor && effectiveLightRoom(d) === effectiveRoom(d)) return "same";
+    return lf + "|" + lr;
+  }
+  function applyLightPlace(value) {
+    const d = state.draft;
+    if (!value || value === "same") {
+      d.lightElsewhere = false;
+      d.lightFloor = "";
+      d.lightRoom = "";
+      d.lightRoomOther = "";
+      return;
+    }
+    if (value === "Other") {
+      d.lightElsewhere = true;
+      d.lightFloor = d.floor || "Main";
+      d.lightRoom = "Other";
+      return;
+    }
+    const bar = value.indexOf("|");
+    if (bar === -1) return;
+    const floor = value.slice(0, bar);
+    const room = value.slice(bar + 1);
+    if (floor === d.floor && room === effectiveRoom(d)) {
+      d.lightElsewhere = false;
+      d.lightFloor = "";
+      d.lightRoom = "";
+      d.lightRoomOther = "";
+      return;
+    }
+    d.lightElsewhere = true;
+    d.lightFloor = floor;
+    d.lightRoom = room;
+    d.lightRoomOther = "";
+  }
+  function syncLightPlaceIfSame() {
+    const d = state.draft;
+    if (!d.lightElsewhere) return;
+    if ((d.lightRoom || "") === "Other") return;
+    const lf = d.lightFloor || d.floor;
+    const lr = effectiveLightRoom(d);
+    if (lf === d.floor && lr === effectiveRoom(d)) {
+      d.lightElsewhere = false;
+      d.lightFloor = "";
+      d.lightRoom = "";
+      d.lightRoomOther = "";
+    }
+  }
+  function lightPlaceSelectHtml(d) {
+    const switchFloor = d.floor || "Main";
+    const switchRoom = effectiveRoom(d) || "";
+    const cur = currentLightPlaceValue(d);
+    const sameLabel = switchRoom ? (switchRoom + " (same as switch)") : "Same as the switch";
+    const groups = [];
+    const seen = {};
+    const addOpt = (opts, floor, room) => {
+      const val = floor + "|" + room;
+      if (seen[val]) return;
+      seen[val] = true;
+      if (floor === switchFloor && room === switchRoom) return;
+      opts.push(`<option value="${esc(val)}"${cur === val ? " selected" : ""}>${esc(room)}</option>`);
+    };
+    const indoorFloors = FLOORS.filter((f) => f !== "Exterior");
+    // Current floor first (or Outside if the switch is already outside)
+    const firstLabel = switchFloor === "Exterior" ? "Outside" : switchFloor;
+    const firstOpts = [];
+    roomsForFloor(switchFloor).filter((r) => r !== "Other").forEach((r) => addOpt(firstOpts, switchFloor, r));
+    if (firstOpts.length) groups.push(`<optgroup label="${esc(firstLabel)}">` + firstOpts.join("") + `</optgroup>`);
+    indoorFloors.filter((f) => f !== switchFloor).forEach((f) => {
+      const opts = [];
+      roomsForFloor(f).filter((r) => r !== "Other").forEach((r) => addOpt(opts, f, r));
+      if (opts.length) groups.push(`<optgroup label="${esc(f)}">` + opts.join("") + `</optgroup>`);
+    });
+    if (switchFloor !== "Exterior") {
+      const opts = [];
+      roomsForFloor("Exterior").filter((r) => r !== "Other").forEach((r) => addOpt(opts, "Exterior", r));
+      if (opts.length) groups.push(`<optgroup label="Outside">` + opts.join("") + `</optgroup>`);
+    }
+    const custom = `<input type="text" data-field="lightRoomOther" value="${esc(d.lightRoomOther || "")}" placeholder="Where the light is" autocomplete="off">`;
+    return `<div class="field-wrap" id="lightPlaceWrap"><div class="light-place-row">${fieldHead("Light is in", "lightPlace", "Where the light or fan or load actually is. It starts as the same room as the switch, so leave it when they match. Change it in one tap when this switch controls a light in another room or outside.")}<select data-field="lightPlace" id="lightPlace"><option value="same"${cur === "same" ? " selected" : ""}>${esc(sameLabel)}</option>${groups.join("")}<option value="Other"${cur === "Other" ? " selected" : ""}>Other…</option></select></div>${cur === "Other" ? custom : ""}</div>`;
   }
   function roomsForFloor(floor) {
     if (floor === "Exterior") return EXTERIOR_ROOMS.slice();
@@ -450,17 +571,25 @@
     const tag = sw.qualifier || "";
     const load = shortLoadName(sw);
     if (lightIsElsewhere(sw, home)) {
-      return locPair(sw.floor, room) + " switch → " + locPair(lightFloorOf(sw), lightRoomOf(sw, home)) + " " + [tag, load].filter(Boolean).join(" ") + count;
+      const swPlace = locPair(sw.floor, room);
+      return (swPlace ? swPlace + " · " : "") + controlsLabel(sw, home);
     }
     return [room || sw.floor || "", tag, load].filter(Boolean).join(" ") + count;
   }
-  function displayName(sw, roomName) {
+  function displayName(sw, roomName, home) {
     const load = sw.load === "Other" ? (sw.loadOther || "Other") : sw.load;
     const q = sw.qualifier || "";
     const n = fixtureCountOf(sw);
     const count = n ? " x" + n : "";
-    if (/^[1-4]$/.test(q)) return [locPair(sw.floor, roomName), q, load].filter(Boolean).join(" ") + count;
-    return [locPair(sw.floor, roomName), load, q].filter(Boolean).join(" ") + count;
+    const base = (/^[1-4]$/.test(q)
+      ? [locPair(sw.floor, roomName), q, load].filter(Boolean).join(" ")
+      : [locPair(sw.floor, roomName), load, q].filter(Boolean).join(" ")) + count;
+    if (!lightIsElsewhere(sw, home)) return base;
+    const where = lightWherePhrase(sw, home);
+    if (!where) return base;
+    if (lightFloorOf(sw) === "Exterior") return base + " (" + where + ")";
+    if (base.indexOf("(in ") !== -1) return base;
+    return base + " (in " + where + ")";
   }
   function roomNameOf(sw, home) { const r = (home.rooms || []).find((x) => x.id === sw.roomId); return r ? r.name : ""; }
   function isSmart(sw) {
@@ -579,6 +708,7 @@
       return;
     }
     d.pickedLightId = sw.id;
+    d.intendNewLight = false;
     d.load = sw.load;
     d.loadOther = sw.loadOther || "";
     d.qualifier = sw.qualifier || "";
@@ -609,11 +739,8 @@
   }
   function sameLightSuggestLabel(sw, home) {
     const name = (sw.qualifier || (sw.load === "Other" ? (sw.loadOther || "light") : (sw.load || "light"))).trim();
-    const floor = lightFloorOf(sw);
-    const room = lightRoomOf(sw, home);
-    const place = (!floor || floor === "Main" || floor.toLowerCase() === String(room || "").toLowerCase())
-      ? (room || floor)
-      : locPair(floor, room);
+    const where = lightWherePhrase(sw, home);
+    const place = lightFloorOf(sw) === "Exterior" ? where : (where ? "in " + where : "");
     const way = wayPositionLabel(sw, home);
     const paren = [place, way].filter(Boolean).join(", ");
     return paren ? ("Same light as " + name + " (" + paren + ")") : ("Same light as " + name);
@@ -635,9 +762,10 @@
     let html = `<p class="suggest-label">Same light as…</p>`;
     lights.forEach((s) => {
       const label = sameLightSuggestLabel(s, home);
-      const on = samePickedLight(home, d, s);
+      const on = !!(d.pickedLightId && samePickedLight(home, d, s));
       html += `<button type="button" class="same-light-chip" data-pick-light="${s.id}" data-label="${esc(label)}" data-load="${esc(s.load || "")}" aria-pressed="${on ? "true" : "false"}">${esc(label)}</button>`;
     });
+    html += `<button type="button" class="same-light-chip new-light-chip" id="suggestNewLight" aria-pressed="${d.intendNewLight ? "true" : "false"}">New light</button>`;
     return html;
   }
   function loadTypeSelectHtml(d) {
@@ -669,17 +797,16 @@
       d.loadOther = "";
     }
     d.loadQuery = (name === "Other") ? (d.loadOther || "") : (name || "");
-    const picked = pickedLightOf(homeOf(), d);
-    if (picked && !sameLoad(picked, d)) {
-      d.pickedLightId = "";
-      d.lightElsewhere = false;
-      d.lightFloor = "";
-      d.lightRoom = "";
-      d.lightRoomOther = "";
-    }
+    d.pickedLightId = "";
+    d.intendNewLight = false;
+    d.lightElsewhere = false;
+    d.lightFloor = "";
+    d.lightRoom = "";
+    d.lightRoomOther = "";
     state.loadTyping = false;
     state.loadFocused = false;
     persist(); render();
+    armSuggestGuard();
     revealInView(document.getElementById("sameLightSuggest") || document.getElementById("loadWrap"));
   }
   function commitLoadQuery() {
@@ -705,6 +832,19 @@
     if (same) same.innerHTML = sameLightSuggestHtml(home, d);
     bindLoadSuggest();
   }
+  let suggestGuardUntil = 0;
+  function armSuggestGuard() { suggestGuardUntil = Date.now() + 450; }
+  function suggestGuardActive() { return Date.now() < suggestGuardUntil; }
+  function chooseNewLightFromSuggest() {
+    const d = state.draft;
+    d.pickedLightId = "";
+    d.intendNewLight = true;
+    d.lightElsewhere = false;
+    d.lightFloor = "";
+    d.lightRoom = "";
+    d.lightRoomOther = "";
+    persist(); render();
+  }
   function bindLoadSuggest(box) {
     const wrap = document.getElementById("loadWrap") || box;
     if (!wrap) return;
@@ -714,10 +854,18 @@
     }));
     wrap.querySelectorAll("[data-pick-light]").forEach((b) => b.addEventListener("click", (e) => {
       e.preventDefault();
+      if (suggestGuardActive()) return;
       state.loadTyping = false;
       state.loadFocused = false;
       pickExistingLight(b.getAttribute("data-pick-light"));
     }));
+    wrap.querySelector("#suggestNewLight")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (suggestGuardActive()) return;
+      state.loadTyping = false;
+      state.loadFocused = false;
+      chooseNewLightFromSuggest();
+    });
   }
   function bindLoadInput() {
     const el = document.getElementById("loadQuery");
@@ -1069,7 +1217,7 @@
       home.switches.filter((sw) => sw.roomId === room.id).forEach((sw) => {
         const others = effectiveOthers(sw, home);
         const plan = isUnknown(sw) && !sw.kindOverride ? "Unknown — identify (not ordered)" : isAlwaysOn(sw) && !sw.kindOverride ? ALWAYS_ON_NOTE : ((others ? wayBadge(others) + " " + (roleOf(sw, home) || "Main") : "") || (sw.groupId ? wayLabel(home.switches.filter((x) => x.groupId === sw.groupId).length) + " " + roleOf(sw, home) : (sw.loggedDumb ? "Keep as is (not smart)" : needsFanType(sw) ? (fanTypeOf(sw) === "ac" ? "Smart Fan (AC)" : fanTypeOf(sw) === "dc" ? "Smart On/off (DC fan, constant power)" : "Verify on site (fan type)") : "Smart " + kindLabel(shopKind(sw)))));
-        lines.push([room.floor, room.name, displayName(sw, room.name), sw.qualifier || "", fixtureCountOf(sw) || "", plan, otherSpotsLabel(others), switchVsLight(sw, home), sw.gangSize + " in box, #" + sw.gangPosition + " from left", locLabel(sw), sw.note || ""].map(csvEscape).join(","));
+        lines.push([room.floor, room.name, displayName(sw, room.name, home), sw.qualifier || "", fixtureCountOf(sw) || "", plan, otherSpotsLabel(others), switchVsLight(sw, home), sw.gangSize + " in box, #" + sw.gangPosition + " from left", locLabel(sw), sw.note || ""].map(csvEscape).join(","));
       });
     });
     if (s.unknowns && s.unknowns.length) {
@@ -1445,9 +1593,13 @@
       const n = Number(d.fixtureCount);
       const count = n > 0 ? " x" + n : "";
       const loadBit = (d.load === "Other" ? (d.loadOther || "other") : (SHORT_LOAD[d.load] || (d.load || ""))).toString();
-      if (d.lightElsewhere) return locPair(d.floor, effectiveRoom(d) || "Room") + " switch → " + locPair(d.lightFloor || d.floor, effectiveLightRoom(d) || "Room") + " " + loadBit + count;
+      if (d.lightElsewhere) {
+        const recLike = { floor: d.floor, room: d.room, roomOther: d.roomOther, load: d.load, loadOther: d.loadOther, qualifier: d.qualifier, fixtureCount: d.fixtureCount, lightFloor: d.lightFloor, lightRoom: d.lightRoom === "Other" ? (d.lightRoomOther || "Other") : d.lightRoom };
+        const swPlace = locPair(d.floor, effectiveRoom(d) || "Room");
+        return (swPlace ? swPlace + " · " : "") + controlsLabel(recLike, home);
+      }
       if (n) return (effectiveRoom(d) || d.floor || "") + " " + (SHORT_LOAD[d.load] || loadBit) + count;
-      return displayName({ floor: d.floor, load: d.load, loadOther: d.loadOther, qualifier: d.qualifier, fixtureCount: d.fixtureCount }, effectiveRoom(d) || "Room");
+      return displayName({ floor: d.floor, room: d.room, roomOther: d.roomOther, load: d.load, loadOther: d.loadOther, qualifier: d.qualifier, fixtureCount: d.fixtureCount, lightFloor: d.lightFloor, lightRoom: d.lightRoom === "Other" ? (d.lightRoomOther || "Other") : d.lightRoom, lightElsewhere: d.lightElsewhere }, effectiveRoom(d) || "Room");
     })();
     const fanMain = showFanTypeMain(d, useKind);
     const fanMore = showFanTypeMore(d, useKind);
@@ -1463,6 +1615,7 @@
         ${selectField("Room", "room", roomsForFloor(d.floor), d.room)}
         ${loadFieldHtml(home, d)}
         </div>
+        ${lightPlaceSelectHtml(d)}
         ${d.room==="Other" ? `<div class="field-wrap">${fieldHead("Room name")}<input type="text" data-field="roomOther" value="${esc(d.roomOther)}" placeholder="Mudroom"></div>` : ""}
         ${isMultiFixture(d.load) ? (state.fixtureOpen ? `<div class="field-wrap" id="fixtureWrap">${fieldHead("Fixtures on this switch", "fixture", "Optional. How many fixtures this switch controls, e.g. 6 cans. Used only for a wattage warning at high counts, and a flicker/bypass note for 1–2 small LEDs on Inovelli without a neutral.")}${chipRow("fixtureCount", ["1","2","3","4","5","6","7","8","8+"], (d.fixtureMany || Number(d.fixtureCount) > 8) ? "8+" : (d.fixtureCount ? String(d.fixtureCount) : ""))}${(d.fixtureMany || Number(d.fixtureCount) > 8) ? `<input type="number" data-field="fixtureCount" inputmode="numeric" min="9" step="1" value="${esc(String(d.fixtureCount || ""))}" placeholder="9 or more">` : ""}<button type="button" class="fixture-add" id="fixtureHide">Hide fixture count</button></div>` : `<button type="button" class="fixture-add" id="fixtureOpen">+ fixture count</button>`) : ""}
         ${!d.loggedDumb && !((d.load === UNKNOWN_LOAD || d.load === ALWAYS_ON_LOAD) && !d.kindOverride) ? `<div class="field-wrap">${fieldHead("Switch type", "kind", "Filled in from what the switch controls. Tap once to change. Not sure if dimmable still orders a dimmer. Exhaust fans order an on/off switch.")}${chipRow("kindOverride", ["Dimmer","On/off","Fan","Not sure if dimmable"], kindChipLabel(d.kindOverride || useKind || "dimmer"))}</div>` : ""}
@@ -1703,7 +1856,7 @@
   }
   function installSlotHtml(sw, home, boxSize) {
     const slot = boxSize > 1 ? ("Slot " + (Number(sw.gangPosition) || 1) + " · ") : "";
-    const controls = (sw.load === "Other" ? (sw.loadOther || "Other") : sw.load) + (sw.qualifier ? " (" + sw.qualifier + ")" : "");
+    const controls = controlsLabel(sw, home);
     const dev = installDeviceLabel(sw, home);
     const way = otherEndsLine(sw, home);
     const role = installRoleLine(sw, home);
@@ -1723,7 +1876,7 @@
         r.boxes.forEach((b, bi) => {
           b.slots.forEach((sw) => {
             const dev = installDeviceLabel(sw, home);
-            const controls = (isUnknown(sw) ? "Unknown" : (sw.load === "Other" ? (sw.loadOther || "Other") : sw.load)) + (sw.qualifier ? " (" + sw.qualifier + ")" : "");
+            const controls = controlsLabel(sw, home);
             lines.push([
               f.floor, r.room, b.size + "-gang", String(Number(sw.gangPosition) || 1),
               controls, dev.device, dev.part, otherEndsLine(sw, home), installRoleLine(sw, home),
@@ -1747,7 +1900,7 @@
           bits.push("    " + b.size + "-gang box");
           b.slots.forEach((sw) => {
             const dev = installDeviceLabel(sw, home);
-            const controls = (sw.load === "Other" ? (sw.loadOther || "Other") : sw.load) + (sw.qualifier ? " (" + sw.qualifier + ")" : "");
+            const controls = controlsLabel(sw, home);
             const slot = b.size > 1 ? "Slot " + (Number(sw.gangPosition) || 1) + ": " : "";
             bits.push("      " + slot + controls);
             bits.push("        " + dev.device);
@@ -1897,7 +2050,14 @@
       el.addEventListener("input", () => {
         const field = el.getAttribute("data-field");
         if (field === "loadQuery") return;
+        if (field === "lightPlace") {
+          applyLightPlace(el.value);
+          persist();
+          render();
+          return;
+        }
         state.draft[field] = el.value;
+        if (field === "room" || field === "roomOther") syncLightPlaceIfSame();
         if (field === "load") state.draft.kindOverride = "";
         if (field === "load") {
           const picked = pickedLightOf(homeOf(), state.draft);
@@ -2040,6 +2200,7 @@
         state.draft.room = "";
         state.draft.roomOther = "";
       }
+      syncLightPlaceIfSame();
     }
     else state.draft[field] = value;
     persist(); render();
@@ -2095,9 +2256,29 @@
     if (!mates.length) return "Saved.";
     return autoJoinMatches(home, rec, mates);
   }
+
+  function saveAsExplicitNewLight(home, rec, asDumb) {
+    if (asDumb) return false;
+    if (!state.draft.intendNewLight || state.draft.pickedLightId) return false;
+    const place = findSameLoadAndPlace(home, rec);
+    if (place.length && !rec.qualifier) rec.qualifier = nextAutoTag(home, rec);
+    if (state.draft.editId) {
+      home.switches = home.switches.map((s) => s.id === rec.id ? { ...s, ...rec } : s);
+    } else if (!home.switches.some((s) => s.id === rec.id)) {
+      home.switches.push(rec);
+    }
+    setHome(home);
+    state.pendingMatch = null;
+    state.draft.intendNewLight = false;
+    flash(rec.qualifier ? ("Saved as a new light (" + rec.qualifier + ").") : "Saved as a new light.");
+    resetDraftKeepRoom();
+    return true;
+  }
   function shouldAutoJoin(home, rec, exact) {
-    if (!exact.length) return false;
-    return lightIsElsewhere(rec, home);
+    // Never auto-link. A Same light chip or the Same/New prompt must be used.
+    // Especially: default Light is in (same as the switch) must not join a
+    // suggested light in a different room.
+    return false;
   }
   function askSameOrNew(home, rec, placeMatches, editing) {
     state.pendingMatch = { rec, candidates: uniqueLightCandidates(home, placeMatches), step: "choose", editing: !!editing };
@@ -2132,6 +2313,7 @@
       resetDraftKeepRoom();
       return;
     }
+    if (saveAsExplicitNewLight(home, rec, asDumb)) return;
     if (d.editId) {
       const prev = home.switches.find((s) => s.id === rec.id);
       rec.excludeIds = (prev && prev.excludeIds) || rec.excludeIds || [];
