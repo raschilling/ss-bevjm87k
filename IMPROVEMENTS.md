@@ -190,3 +190,8 @@ Fix (version `2026-11-24f`): after **Save**, the form auto-resets for the next s
 **What it controls** no longer uses a left-right scrolling list of types. It is an A–Z dropdown that is easy to use on a phone, with **Unknown / find out** at the top, then types including the new **Accent lights**. Choosing a type from the dropdown still shows **Same light as…** chips when that type is already logged in this home. You can also type a name.
 
 **Unknown / find out** is a one-tap way to log a switch when you do not know what it does. Save goes through with no Same/New prompt. Unknowns never auto-group as 3-ways. They default to a to-identify state and stay off the smart-switch parts list unless you later pick a device type. An **Unknown** badge shows on Survey order, the Install list, and in the CSV. Summary has an **Unknowns to identify** list with floor, room, box, slot, and notes, so a note like “switch cover” is easy to find. Version `2026-11-24h`.
+
+
+## 2026-11-24 — Ring camera stays powered
+
+**Ring camera** is in the What it controls dropdown. It can still be linked as the same load or a new one, like other types. It is flagged on the Install list as “Keep always on, don't put on a smart switch or dimmer,” and it stays off the smart-switch parts list unless you explicitly pick a device type. Version `2026-11-24i`.

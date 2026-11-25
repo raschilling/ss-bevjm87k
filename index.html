@@ -13,7 +13,7 @@
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
   <meta name="robots" content="noindex, nofollow, noarchive">
   <meta name="description" content="Private switch survey.">
-  <meta name="ss-version" content="2026-11-24h">
+  <meta name="ss-version" content="2026-11-24i">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -179,6 +179,12 @@
       white-space: nowrap; background: var(--warn-bg); color: var(--warn);
       border: 1px solid var(--warn);
     }
+    .badge-always-on {
+      display: inline-block; font-size: .75rem; font-weight: 700; letter-spacing: .01em;
+      padding: 2px 8px; border-radius: 999px; margin-left: 6px; vertical-align: middle;
+      white-space: nowrap; background: var(--warn-bg); color: var(--warn);
+      border: 1px solid var(--warn);
+    }
     #loadType { width: 100%; max-width: 420px; margin-top: 6px; }
     .unknowns-list { display: flex; flex-direction: column; gap: 8px; }
 
@@ -217,14 +223,16 @@
 (() => {
   const META_KEY = "switchSurvey.meta.v1";
   const DATA_KEY = "switchSurvey.data.v2";
-  const APP_VERSION = "2026-11-24h";
+  const APP_VERSION = "2026-11-24i";
   const ITERATIONS = 150000;
   const FLOORS = ["Basement","Main","Upper","Exterior"];
   const INDOOR_ROOMS = ["Bedroom","Closet","Dining room","Family room","Foyer","Garage","Guest bath","Half bath","Hall","Kitchen","Laundry","Living room","Office","Primary bath","Primary bedroom","Stairs","Other"];
   const EXTERIOR_ROOMS = ["Back patio","Deck","Driveway","Front porch","Garage exterior","Landscape","Side door","Other"];
-  const LOADS = ["Accent lights","Can lights","Ceiling fan","Chandelier","Closet light","Exhaust fan","Exterior lights","Fan + light","Flood lights","Lamp outlet","Pendants","Sconces","Under-cabinet","Vanity light","Wafer lights","Other"];
+  const LOADS = ["Accent lights","Can lights","Ceiling fan","Chandelier","Closet light","Exhaust fan","Exterior lights","Fan + light","Flood lights","Lamp outlet","Pendants","Ring camera","Sconces","Under-cabinet","Vanity light","Wafer lights","Other"];
   const UNKNOWN_LOAD = "Unknown";
   const UNKNOWN_LABEL = "Unknown / find out";
+  const ALWAYS_ON_LOAD = "Ring camera";
+  const ALWAYS_ON_NOTE = "Keep always on, don't put on a smart switch or dimmer.";
   const GANG_SIZES = ["1","2","3","4","5","6"];
   const MULTI_FIXTURE_LOADS = ["Accent lights","Can lights","Chandelier","Exterior lights","Flood lights","Pendants","Sconces","Under-cabinet","Wafer lights"];
   const SHORT_LOAD = {"Accent lights":"accent lights","Can lights":"cans","Wafer lights":"wafers","Sconces":"sconces","Pendants":"pendants","Under-cabinet":"under-cabinet","Chandelier":"chandelier","Flood lights":"floods","Exterior lights":"exterior lights"};
@@ -340,13 +348,17 @@
     return sw.location || "";
   }
   function kindForLoad(load) {
-    if (load === UNKNOWN_LOAD) return "";
+    if (load === UNKNOWN_LOAD || load === ALWAYS_ON_LOAD) return "";
     if (load === "Ceiling fan" || load === "Fan + light") return "fan";
     if (["Exhaust fan","Closet light","Flood lights","Exterior lights","Lamp outlet"].includes(load)) return "onoff";
     return "dimmer";
   }
   function isUnknown(sw) { return !!(sw && sw.load === UNKNOWN_LOAD); }
+  function isAlwaysOn(sw) { return !!(sw && sw.load === ALWAYS_ON_LOAD); }
+  function staysUnswitched(sw) { return (isUnknown(sw) || isAlwaysOn(sw)) && !(sw && sw.kindOverride); }
+  function canLinkLoad(sw) { return !!(sw && sw.loggedDumb !== true && !isUnknown(sw)); }
   function unknownBadgeHtml() { return ` <span class="badge-unknown">${esc("Unknown")}</span>`; }
+  function alwaysOnBadgeHtml() { return ` <span class="badge-always-on">${esc("Always on")}</span>`; }
   const UNSURE_DIMMABLE_NOTE = "Not sure if dimmable: set to on/off mode if the bulbs don't dim, or swap to dimmable LEDs.";
   function isUnsureDimmable(sw) { return !!(sw && sw.kindOverride === "unsure-dimmable"); }
   function kindLabel(k) { return k === "fan" ? "Fan" : k === "onoff" ? "On/off" : "Dimmer"; }
@@ -358,6 +370,7 @@
   }
   function orderHint(d, useKind) {
     if (d.load === UNKNOWN_LOAD && !d.kindOverride) return "identify on site (not added to the parts list)";
+    if (d.load === ALWAYS_ON_LOAD && !d.kindOverride) return "keep always on, don't put on a smart switch or dimmer (not added to the parts list)";
     if (d.kindOverride === "unsure-dimmable") return "orders as a Dimmer (not sure if dimmable)";
     if (useKind === "fan") {
       const ft = d.fanType === "ac" ? "ac" : d.fanType === "dc" ? "dc" : "unknown";
@@ -452,12 +465,12 @@
   function roomNameOf(sw, home) { const r = (home.rooms || []).find((x) => x.id === sw.roomId); return r ? r.name : ""; }
   function isSmart(sw) {
     if (!sw || sw.loggedDumb === true) return false;
-    if (isUnknown(sw) && !sw.kindOverride) return false;
+    if (staysUnswitched(sw)) return false;
     return true;
   }
   function shopKind(sw) {
     if (sw.loggedDumb && !sw.groupId) return "dumb";
-    if (isUnknown(sw) && !sw.kindOverride) return "";
+    if (staysUnswitched(sw)) return "";
     if (sw.kindOverride === "unsure-dimmable") return "dimmer";
     if (sw.kindOverride) return sw.kindOverride;
     return kindForLoad(sw.load === "Other" ? (sw.loadOther || "") : sw.load);
@@ -476,7 +489,7 @@
     return false;
   }
   function buyKind(sw, home) {
-    if ((!isSmart(sw) && !sw.groupId) || isVerifyDevice(sw, home)) return "";
+    if (staysUnswitched(sw) || (!isSmart(sw) && !sw.groupId) || isVerifyDevice(sw, home)) return "";
     if (roleOf(sw, home) === "Companion") return "companion";
     const k = shopKind(sw);
     if (k === "fan") return fanTypeOf(sw) === "dc" ? "onoff" : "fan";
@@ -489,7 +502,7 @@
   }
   function findMatches(home, rec) {
     const key = groupKeyOf(rec, home);
-    return home.switches.filter((s) => s.id !== rec.id && isSmart(s) && groupKeyOf(s, home) === key && !isSplitPair(s, rec));
+    return home.switches.filter((s) => s.id !== rec.id && canLinkLoad(s) && groupKeyOf(s, home) === key && !isSplitPair(s, rec));
   }
   function sameLoad(a, b) {
     if (!a || !b) return false;
@@ -499,7 +512,7 @@
     return true;
   }
   function findSameLoadAndPlace(home, rec) {
-    return home.switches.filter((s) => s.id !== rec.id && isSmart(s) && sameLoad(s, rec) && lightFloorOf(s) === lightFloorOf(rec) && lightRoomOf(s, home) === lightRoomOf(rec, home));
+    return home.switches.filter((s) => s.id !== rec.id && canLinkLoad(s) && sameLoad(s, rec) && lightFloorOf(s) === lightFloorOf(rec) && lightRoomOf(s, home) === lightRoomOf(rec, home));
   }
   function uniqueLightCandidates(home, switches) {
     const seen = {}, out = [];
@@ -521,7 +534,7 @@
   function uniqueLightsRecentFirst(home, exceptId) {
     const indexOf = {}, buckets = [];
     (home.switches || []).forEach((s, i) => {
-      if (!isSmart(s) || isUnknown(s) || s.id === exceptId) return;
+      if (!canLinkLoad(s) || s.id === exceptId) return;
       const idKey = lightIdentityKey(s, home);
       if (indexOf[idKey] === undefined) {
         indexOf[idKey] = buckets.length;
@@ -948,7 +961,7 @@
     };
     const unknowns = (home.switches || []).filter(isUnknown);
     home.switches.forEach((s) => {
-      if (isUnknown(s) && !s.kindOverride) return;
+      if (staysUnswitched(s)) return;
       if (!isSmart(s) && !s.groupId) { dumb++; return; }
       if (s.groupId) {
         if (countedGroups.has(s.groupId)) return;
@@ -966,7 +979,7 @@
     });
     const plates = {};
     const buckets = {};
-    const forPlates = home.switches.filter((s) => isSmart(s) || s.groupId);
+    const forPlates = home.switches.filter((s) => (isSmart(s) || s.groupId) && !staysUnswitched(s));
     forPlates.forEach((s) => {
       const g = Number(s.gangSize) || 1;
       const key = s.floor + "|" + roomNameOf(s, home) + "|" + g;
@@ -1054,7 +1067,7 @@
     (home.rooms || []).forEach((room) => {
       home.switches.filter((sw) => sw.roomId === room.id).forEach((sw) => {
         const others = effectiveOthers(sw, home);
-        const plan = isUnknown(sw) && !sw.kindOverride ? "Unknown — identify (not ordered)" : ((others ? wayBadge(others) + " " + (roleOf(sw, home) || "Main") : "") || (sw.groupId ? wayLabel(home.switches.filter((x) => x.groupId === sw.groupId).length) + " " + roleOf(sw, home) : (sw.loggedDumb ? "Keep as is (not smart)" : needsFanType(sw) ? (fanTypeOf(sw) === "ac" ? "Smart Fan (AC)" : fanTypeOf(sw) === "dc" ? "Smart On/off (DC fan, constant power)" : "Verify on site (fan type)") : "Smart " + kindLabel(shopKind(sw)))));
+        const plan = isUnknown(sw) && !sw.kindOverride ? "Unknown — identify (not ordered)" : isAlwaysOn(sw) && !sw.kindOverride ? ALWAYS_ON_NOTE : ((others ? wayBadge(others) + " " + (roleOf(sw, home) || "Main") : "") || (sw.groupId ? wayLabel(home.switches.filter((x) => x.groupId === sw.groupId).length) + " " + roleOf(sw, home) : (sw.loggedDumb ? "Keep as is (not smart)" : needsFanType(sw) ? (fanTypeOf(sw) === "ac" ? "Smart Fan (AC)" : fanTypeOf(sw) === "dc" ? "Smart On/off (DC fan, constant power)" : "Verify on site (fan type)") : "Smart " + kindLabel(shopKind(sw)))));
         lines.push([room.floor, room.name, displayName(sw, room.name), sw.qualifier || "", fixtureCountOf(sw) || "", plan, otherSpotsLabel(others), switchVsLight(sw, home), sw.gangSize + " in box, #" + sw.gangPosition + " from left", locLabel(sw), sw.note || ""].map(csvEscape).join(","));
       });
     });
@@ -1445,11 +1458,11 @@
         </div>
         ${d.room==="Other" ? `<div class="field-wrap">${fieldHead("Room name")}<input type="text" data-field="roomOther" value="${esc(d.roomOther)}" placeholder="Mudroom"></div>` : ""}
         ${isMultiFixture(d.load) ? (state.fixtureOpen ? `<div class="field-wrap" id="fixtureWrap">${fieldHead("Fixtures on this switch", "fixture", "Optional. How many fixtures this switch controls, e.g. 6 cans. Used only for a wattage warning at high counts, and a flicker/bypass note for 1–2 small LEDs on Inovelli without a neutral.")}${chipRow("fixtureCount", ["1","2","3","4","5","6","7","8","8+"], (d.fixtureMany || Number(d.fixtureCount) > 8) ? "8+" : (d.fixtureCount ? String(d.fixtureCount) : ""))}${(d.fixtureMany || Number(d.fixtureCount) > 8) ? `<input type="number" data-field="fixtureCount" inputmode="numeric" min="9" step="1" value="${esc(String(d.fixtureCount || ""))}" placeholder="9 or more">` : ""}<button type="button" class="fixture-add" id="fixtureHide">Hide fixture count</button></div>` : `<button type="button" class="fixture-add" id="fixtureOpen">+ fixture count</button>`) : ""}
-        ${!d.loggedDumb && !(d.load === UNKNOWN_LOAD && !d.kindOverride) ? `<div class="field-wrap">${fieldHead("Switch type", "kind", "Filled in from what the switch controls. Tap once to change. Not sure if dimmable still orders a dimmer. Exhaust fans order an on/off switch.")}${chipRow("kindOverride", ["Dimmer","On/off","Fan","Not sure if dimmable"], kindChipLabel(d.kindOverride || useKind || "dimmer"))}</div>` : ""}
+        ${!d.loggedDumb && !((d.load === UNKNOWN_LOAD || d.load === ALWAYS_ON_LOAD) && !d.kindOverride) ? `<div class="field-wrap">${fieldHead("Switch type", "kind", "Filled in from what the switch controls. Tap once to change. Not sure if dimmable still orders a dimmer. Exhaust fans order an on/off switch.")}${chipRow("kindOverride", ["Dimmer","On/off","Fan","Not sure if dimmable"], kindChipLabel(d.kindOverride || useKind || "dimmer"))}</div>` : ""}
         ${fanMain ? `<div class="field-wrap">${fieldHead("Fan type", "fan", "AC uses a fan switch. DC uses an on/off (constant power); speed via fan remote/integration. Not sure is listed under Verify on site and stays off the order until you choose.")}${chipRow("fanType", FAN_TYPES, fanTypeLabel(d.fanType))}</div>` : ""}
         ${!d.loggedDumb ? `<div class="field-wrap">${fieldHead("Switches in this box", "gang", "How many switches share this wall box, including this one. Most are just one.")}${chipRow("gangSize", GANG_SIZES, String(d.gangSize))}</div>` : ""}
         ${!d.loggedDumb && d.gangSize > 1 ? `<div class="field-wrap">${fieldHead("Which slot, left to right?", "slot", "Count from the left as you face the wall.")}${chipRow("gangPosition", Array.from({length:d.gangSize},(_,i)=>String(i+1)), String(d.gangPosition))}</div>` : ""}
-        ${d.load ? `<div class="auto">${esc(preview)} · ${esc(orderHint(d, useKind))}.${d.load === UNKNOWN_LOAD ? unknownBadgeHtml() : badgeHtml(draftOthers(home, d))}</div>` : ""}
+        ${d.load ? `<div class="auto">${esc(preview)} · ${esc(orderHint(d, useKind))}.${d.load === UNKNOWN_LOAD ? unknownBadgeHtml() : (d.load === ALWAYS_ON_LOAD ? alwaysOnBadgeHtml() : badgeHtml(draftOthers(home, d)))}</div>` : ""}
         <div id="more" class="${state.moreOpen ? "" : "hidden"}" style="margin-top:8px">${moreHtml}
         </div>
         <div class="stack" style="margin-top:8px">
@@ -1471,11 +1484,11 @@
     if (!home.switches.length) { const empty = document.createElement("div"); return empty; }
     let html = `<div class="card">${headingInfo("Survey order", "surveyOrder", "In the order you saved them. Switches for the same light are grouped automatically. Each one shows its place in the group, like 3-way 1/2 or 4-way 2/3. A single switch has no badge.")}<div class="stack">`;
     home.switches.forEach((s, i) => {
-      const badge = isUnknown(s) ? unknownBadgeHtml() : (isSmart(s) ? positionBadgeHtml(s, home) : "");
+      const badge = isUnknown(s) ? unknownBadgeHtml() : (isAlwaysOn(s) && !s.kindOverride ? alwaysOnBadgeHtml() : (isSmart(s) ? positionBadgeHtml(s, home) : ""));
       const vs = switchVsLight(s, home);
       const sub = [
         locPair(s.floor, roomNameOf(s, home)),
-        isUnknown(s) ? (s.kindOverride ? "Unknown — " + kindLabel(shopKind(s)) + " picked" : "Unknown — identify") : (isSmart(s) ? ((roleOf(s, home) === "Companion" ? "Extra switch" : "Smart") + " " + kindLabel(shopKind(s))) : "Keep as is (not smart)"),
+        isUnknown(s) ? (s.kindOverride ? "Unknown — " + kindLabel(shopKind(s)) + " picked" : "Unknown — identify") : (isAlwaysOn(s) && !s.kindOverride ? ALWAYS_ON_NOTE : (isSmart(s) ? ((roleOf(s, home) === "Companion" ? "Extra switch" : "Smart") + " " + kindLabel(shopKind(s))) : "Keep as is (not smart)")),
         locLabel(s),
         vs,
         isUnknown(s) && s.note ? s.note : ""
@@ -1582,6 +1595,7 @@
 
   function installDeviceLabel(sw, home) {
     if (isUnknown(sw) && !sw.kindOverride) return { device: "Unknown — identify on site (not ordered)", part: "" };
+    if (isAlwaysOn(sw) && !sw.kindOverride) return { device: ALWAYS_ON_NOTE, part: "" };
     if (!isSmart(sw) && !sw.groupId) return { device: "Keep as is (not smart) — leave this switch", part: "" };
     if (isVerifyDevice(sw, home)) return { device: "Verify on site before installing", part: "" };
     const role = roleOf(sw, home);
@@ -1607,6 +1621,7 @@
       else if (isVerifyFan(sw)) notes.push("Confirm whether this fan is AC or DC before installing.");
     }
     if (sw.load === "Exhaust fan") notes.push("Exhaust fan — on/off switch, not a fan speed switch.");
+    if (isAlwaysOn(sw) && !sw.kindOverride) notes.push(ALWAYS_ON_NOTE);
     const n = fixtureCountOf(sw);
     if (n >= 6) notes.push("High fixture count (x" + n + ") — check wattage limit.");
     if (sw.note) notes.push(sw.note);
@@ -1686,7 +1701,7 @@
     const way = otherEndsLine(sw, home);
     const role = installRoleLine(sw, home);
     const notes = installNotes(sw, home);
-    return `<div class="install-slot" data-install-slot="${sw.id}"><strong>${esc(slot + controls)}${isUnknown(sw) ? unknownBadgeHtml() : ""}</strong><span class="sub">${esc(dev.device)}</span>${way ? `<span class="sub">${esc(way)}</span>` : ""}${role ? `<span class="sub">${esc(role)}</span>` : ""}${notes.map((n) => `<span class="sub">${esc(n)}</span>`).join("")}</div>`;
+    return `<div class="install-slot" data-install-slot="${sw.id}"><strong>${esc(slot + controls)}${isUnknown(sw) ? unknownBadgeHtml() : (isAlwaysOn(sw) && !sw.kindOverride ? alwaysOnBadgeHtml() : "")}</strong><span class="sub">${esc(dev.device)}</span>${way ? `<span class="sub">${esc(way)}</span>` : ""}${role ? `<span class="sub">${esc(role)}</span>` : ""}${notes.map((n) => `<span class="sub">${esc(n)}</span>`).join("")}</div>`;
   }
   function installListHtml(home) {
     const floors = installFloors(home);
