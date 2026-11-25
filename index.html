@@ -475,6 +475,8 @@
   function isAlwaysOn(sw) { return !!(sw && sw.load === ALWAYS_ON_LOAD); }
   function staysUnswitched(sw) { return (isUnknown(sw) || isAlwaysOn(sw)) && !(sw && sw.kindOverride); }
   function canLinkLoad(sw) { return !!(sw && !isUnknown(sw) && !staysUnswitched(sw)); }
+  function isOpenDumb(sw) { return !!(sw && sw.loggedDumb && !(sw.load || sw.loadOther)); }
+
   function unknownBadgeHtml() { return ` <span class="badge-unknown">${esc("Unknown")}</span>`; }
   function alwaysOnBadgeHtml() { return ` <span class="badge-always-on">${esc("Always on")}</span>`; }
   const UNSURE_DIMMABLE_NOTE = "Not sure if dimmable: set to on/off mode if the bulbs don't dim, or swap to dimmable LEDs.";
@@ -873,7 +875,17 @@
     return true;
   }
   function findSameLoadAndPlace(home, rec) {
-    return home.switches.filter((s) => s.id !== rec.id && canLinkLoad(s) && sameLoad(s, rec) && sameQualifier(s, rec) && lightFloorOf(s) === lightFloorOf(rec) && lightRoomOf(s, home) === lightRoomOf(rec, home));
+    return home.switches.filter((s) => {
+      if (s.id === rec.id || !canLinkLoad(s) || !sameQualifier(s, rec)) return false;
+      const samePlace = lightFloorOf(s) === lightFloorOf(rec) && lightRoomOf(s, home) === lightRoomOf(rec, home);
+      if (sameLoad(s, rec) && samePlace) return true;
+      if (isOpenDumb(s)) {
+        const sRoom = (lightRoomOf(s, home) || roomNameOf(s, home) || "").toLowerCase();
+        const rRoom = (lightRoomOf(rec, home) || rec.lightRoom || (rec.room === "Other" ? rec.roomOther : rec.room) || "").toLowerCase();
+        return !sRoom || !rRoom || sRoom === rRoom;
+      }
+      return false;
+    });
   }
   function uniqueLightCandidates(home, switches) {
     const seen = {}, out = [];
@@ -943,9 +955,11 @@
     state.pendingMatch = null;
     d.pickedLightId = sw.id;
     d.intendNewLight = false;
-    d.load = sw.load;
-    d.loadOther = sw.loadOther || "";
-    d.qualifier = sw.qualifier || "";
+    if (sw.load) {
+      d.load = sw.load;
+      d.loadOther = sw.loadOther || "";
+    }
+    if (whichOneOf(sw)) d.qualifier = sw.qualifier || "";
     d.lightFloor = lightFloorOf(sw);
     d.lightRoom = lightRoomOf(sw, home);
     d.lightRoomOther = "";
@@ -985,6 +999,7 @@
     if (!q && !d.load) return [];
     return uniqueLightsRecentFirst(home, d.editId).filter((s) => {
       if (!sameQualifier(s, d)) return false;
+      if (isOpenDumb(s)) return true;
       if (!state.loadTyping && d.load) return sameLoad(s, d);
       if (lightMatchesQuery(s, home, q)) return true;
       if (q && s.load && s.load.toLowerCase().indexOf(q.toLowerCase()) !== -1) return true;
@@ -1000,8 +1015,9 @@
       const label = sameLightSuggestLabel(s, home);
       const pressed = !!(d.pickedLightId && samePickedLight(home, d, s));
       const note = switchNoteText(s);
+      const style = isDumbPlan(s) ? "Keep as is · modern standard" : "";
       const check = pressed ? `<span class="same-light-check" aria-hidden="true">✓</span>` : "";
-      html += `<button type="button" class="same-light-row" data-pick-light="${s.id}" data-label="${esc(label)}" data-load="${esc(s.load || "")}" aria-pressed="${pressed ? "true" : "false"}"><strong>${check}${esc(title)}</strong>${note ? `<span class="sub same-light-note">${esc(note)}</span>` : ""}</button>`;
+      html += `<button type="button" class="same-light-row" data-pick-light="${s.id}" data-label="${esc(label)}" data-load="${esc(s.load || "")}" aria-pressed="${pressed ? "true" : "false"}"><strong>${check}${esc(title)}</strong>${style ? `<span class="sub">${esc(style)}</span>` : ""}${note ? `<span class="sub same-light-note">${esc(note)}</span>` : ""}</button>`;
     });
     const newPressed = !!d.intendNewLight;
     const newCheck = newPressed ? `<span class="same-light-check" aria-hidden="true">✓</span>` : "";
@@ -2077,22 +2093,35 @@
       const way = dumbWayLabel(dumbWayKind(sw, home));
       const miss = dumbMissingFields(sw, home);
       const flag = miss.length ? " — recheck " + miss.join(", ") : "";
-      return { device: "Modern standard " + way + " (not smart, decora)" + flag, part: "Standard decora" };
+      const mix = mixedStyleGroup(sw, home) ? " — mixed styles, both ends should match" : "";
+      return { device: "Modern standard " + way + " (not smart, decora)" + flag + mix, part: "Standard decora" };
     }
     if (isVerifyDevice(sw, home)) return { device: "Verify on site before installing", part: "" };
+    const mixed = mixedStyleGroup(sw, home) ? " — mixed styles, both ends should match" : "";
     const role = roleOf(sw, home);
     const brand = home.brand || "undecided";
     if (role === "Companion") {
       const part = skuFor(brand, "companion");
-      return { device: part ? "Companion — " + part : "Companion (extra switch)", part: part || "" };
+      return { device: (part ? "Companion — " + part : "Companion (extra switch)") + mixed, part: part || "" };
     }
     const kind = buyKind(sw, home) || shopKind(sw);
     const part = skuFor(brand, kind);
     const generic = "Smart " + kindLabel(kind);
-    return { device: part ? generic + " — " + part : generic, part: part || "" };
+    return { device: (part ? generic + " — " + part : generic) + mixed, part: part || "" };
+  }
+  function mixedStyleGroup(sw, home) {
+    const members = membersOf(sw, home);
+    if (members.length < 2) return false;
+    const hasDumb = members.some(isDumbPlan);
+    const hasSmart = members.some((m) => isSmart(m));
+    return hasDumb && hasSmart;
+  }
+  function mixedStyleNote() {
+    return "This 3-way has mixed switch styles. Both ends should match: both smart, or both modern standard (not smart).";
   }
   function installNotes(sw, home) {
     const notes = [];
+    if (mixedStyleGroup(sw, home)) notes.push(mixedStyleNote());
     if (isUnsureDimmable(sw) || (sw.groupId && (home.switches || []).some((m) => m.groupId === sw.groupId && isUnsureDimmable(m)))) {
       notes.push("Not sure if dimmable: set to on/off mode if the bulbs don't dim, or swap to dimmable LEDs.");
     }
