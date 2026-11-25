@@ -49,7 +49,7 @@ async def run():
         await page.goto(BASE, wait_until="load")
         await page.wait_for_selector("#loadQuery", timeout=15000)
         ver = await page.evaluate("() => (window.__ss && __ss.appVersion && __ss.appVersion()) || (document.querySelector('meta[name=\\'ss-version\\']') || {}).content")
-        check("version is 2026-11-24j", ver == "2026-11-24j", ver)
+        check("version is 2026-11-24k", ver == "2026-11-24k", ver)
 
         # What it controls
         load_el = page.locator("#loadQuery")

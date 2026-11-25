@@ -222,6 +222,8 @@ async def run():
               load_opts)
         check("Accent lights is in the type list", "Accent lights" in load_opts)
         check("Ring camera is in the type list", "Ring camera" in load_opts)
+        check("Upper cabinet lights is in the type list", "Upper cabinet lights" in load_opts)
+        check("Under-cabinet is still in the type list", "Under-cabinet" in load_opts)
         check("Light is in is on the first-launch form", await page.locator("#lightPlace").count() > 0 and "Light is in" in body)
         same_opt = await page.locator("#lightPlace option[value='same']").text_content()
         check("Light is in defaults to same as the switch", (same_opt or "").strip().lower().startswith("same as") or "same as switch" in (same_opt or "").lower(), same_opt)
