@@ -195,3 +195,5 @@ Fix (version `2026-11-24f`): after **Save**, the form auto-resets for the next s
 ## 2026-11-24 — Ring camera stays powered
 
 **Ring camera** is in the What it controls dropdown. It can still be linked as the same load or a new one, like other types. It is flagged on the Install list as “Keep always on, don't put on a smart switch or dimmer,” and it stays off the smart-switch parts list unless you explicitly pick a device type. Version `2026-11-24i`.
+
+**Notes and other text fields keep the keyboard open (2026-11-24i).** Typing in Note, a custom room name, What it controls, the house name, or a custom fixture count used to rebuild the form on each keystroke, which closed the iOS keyboard after one letter. Those fields now save as you type without replacing the focused input. Selects and chips still refresh the form as needed.

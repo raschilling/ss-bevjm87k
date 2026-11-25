@@ -723,17 +723,17 @@
     const el = document.getElementById("loadQuery");
     if (!el) return;
     const wrap = document.getElementById("loadWrap");
-    const show = () => {
+    const show = (scroll) => {
       state.loadFocused = true;
       refreshLoadSuggest();
       const same = document.getElementById("sameLightSuggest");
       el.setAttribute("aria-expanded", same && same.innerHTML.trim() ? "true" : "false");
-      revealInView(same || el);
+      if (scroll) revealInView(same || el);
     };
     el.addEventListener("focus", () => {
       state.loadTyping = true;
       state.draft.loadQuery = el.value;
-      show();
+      show(true);
     });
     el.addEventListener("input", () => {
       state.loadTyping = true;
@@ -745,7 +745,8 @@
         state.draft.lightRoom = "";
         state.draft.lightRoomOther = "";
       }
-      show();
+      show(false);
+      persist();
     });
     el.addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); commitLoadQuery(); }
@@ -1227,6 +1228,12 @@
     localStorage.setItem(DATA_KEY, payload);
     if (!localStorage.getItem(DATA_KEY)) throw new Error("storage");
   }
+  function isTypingInField() {
+    const a = document.activeElement;
+    if (!a) return false;
+    const tag = (a.tagName || "").toLowerCase();
+    return tag === "input" || tag === "textarea" || a.isContentEditable;
+  }
   function persist() {
     if (!state.store) return;
     try {
@@ -1234,7 +1241,7 @@
     } catch (err) {
       state.storageOk = false;
       state.flash = "Could not save to this browser. Your latest change is on screen only. Avoid Private Browsing, and use the same Safari or Home Screen icon each time.";
-      render();
+      if (!isTypingInField()) render();
     }
   }
   function clearMigrateSecrets() {
@@ -1922,7 +1929,9 @@
           if (empty) empty.style.display = any ? "none" : "";
           return;
         }
-        persist(); render();
+        persist();
+        // Never replace a focused text field. Selects can rerender (room change, etc.).
+        if (el.tagName === "SELECT") render();
       });
     });
     document.querySelectorAll("[data-pick-light]").forEach((b) => {
