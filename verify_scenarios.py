@@ -221,6 +221,7 @@ async def run():
               and [o.strip() for o in load_opts if o.strip() and "Type or choose" not in o][0] == "Unknown / find out",
               load_opts)
         check("Accent lights is in the type list", "Accent lights" in load_opts)
+        check("Ring camera is in the type list", "Ring camera" in load_opts)
         check("Also controlled from is gone", "Also controlled from" not in body and "Doorway or wall" not in body and "Lights already logged" not in body)
         save_box = await page.locator("#saveSw").bounding_box()
         check("Save fits on 393x852 with gang visible", bool(save_box) and save_box["y"] + save_box["height"] <= 852, save_box)
@@ -928,6 +929,38 @@ async def run():
         await shot(page, "375-dark-unknown-keyboard.png")
         await page.locator("h1").click()
         await page.set_viewport_size({"width": 393, "height": 852})
+        await page.wait_for_timeout(80)
+
+
+        # 16. Ring camera: always on, not ordered, can still Same/New
+        await goto_walk_new_home(page, "S16 Ring camera")
+        await page.set_viewport_size({"width": 393, "height": 852})
+        opts = await page.locator("#loadType option").all_text_contents()
+        check("S16 Ring camera is in the dropdown", "Ring camera" in opts)
+        await pick_room_load(page, "Kitchen", "Ring camera")
+        body = await page.inner_text("body")
+        check("S16 preview says keep always on", "keep always on" in body.lower() and "smart switch or dimmer" in body.lower())
+        await save(page)
+        check("S16 first Ring camera has no Same/New", not await has_same_or_new(page))
+        await pick_room_load(page, "Kitchen", "Ring camera")
+        await save(page)
+        check("S16 second Ring camera prompts Same/New", await has_same_or_new(page))
+        await click_same_light(page, "Kitchen")
+        body = await page.inner_text("body")
+        check("S16 same-light grouping works", "3-way" in body or "Linked as a 3-way" in body)
+        await page.click("[data-tab='summary']")
+        await page.wait_for_timeout(200)
+        await show_parts(page)
+        body = await page.inner_text("body")
+        check("S16 install list flags keep always on", "Keep always on, don't put on a smart switch or dimmer" in body or "keep always on, don't put on a smart switch or dimmer" in body.lower())
+        q = await qty_on(page)
+        check("S16 Ring cameras are not on the parts order",
+              q.get("Smart dimmer", 0) == 0 and q.get("Smart on/off", 0) == 0 and q.get("Companion", 0) == 0, q)
+        await shot(page, "393-dark-ring-camera-install.png")
+        await page.emulate_media(color_scheme="light")
+        await page.wait_for_timeout(80)
+        await shot(page, "393-light-ring-camera-install.png")
+        await page.emulate_media(color_scheme="dark")
         await page.wait_for_timeout(80)
 
         # Light theme screenshots of walk form + summary, chips visible
