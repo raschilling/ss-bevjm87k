@@ -1,5 +1,5 @@
 /* Network-only worker so a later Switch Survey update replaces a cached page. */
-const VERSION = "2026-11-24k";
+const VERSION = "2026-11-24l";
 self.addEventListener("install", (event) => {
   self.skipWaiting();
 });

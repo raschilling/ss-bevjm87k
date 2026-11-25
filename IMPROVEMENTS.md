@@ -207,3 +207,9 @@ A **Light is in** dropdown sits right under What it controls. It starts as the s
 ## 2026-11-24 — Upper cabinet lights
 
 **Upper cabinet lights** is in the What it controls A–Z dropdown, after Under-cabinet (which is unchanged). It is a normal light: it defaults to a dimmer, can group as Same/New, and shows on the Install list, parts list, and CSV. Version `2026-11-24k`.
+
+## 2026-11-24 — Which one, and clearer Same light rows
+
+An optional **Which one** field sits right under What it controls (placeholder “over stairs, by front door”). Type a short name when a room has more than one of the same light. It saves as you type without closing the keyboard, and it clears after Save like the other fields. Labels always use the type plus the nickname, never a bare tag: “Chandelier, over stairs” or “Chandelier #2” on the preview, Same light rows, Survey order, Install list, parts, and CSV.
+
+Same light suggestions are a stacked list of tappable rows under a one-line prompt: “Is this a light you already logged? Tap it. Otherwise tap New light.” Each row names the existing light (type + nickname, light room) and the switch it is already on (switch room, location, gang and slot, and the switch’s full notes, wrapped so they stay readable at 393px). If the notes or Which one mention a room — for example “mudroom” — that name is included in the row label so you can tell the lights apart. A selected row fills in and shows a check. Tapping a Same light row selects it, closes any New light naming panel, and Save links it as a 3-way. The New light naming panel opens only when you tap New light. A light with a different Which one is not offered as the same light; blank names still suggest as before, and nothing is pre-selected. Version `2026-11-24l`.

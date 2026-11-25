@@ -13,7 +13,7 @@
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
   <meta name="robots" content="noindex, nofollow, noarchive">
   <meta name="description" content="Private switch survey.">
-  <meta name="ss-version" content="2026-11-24k">
+  <meta name="ss-version" content="2026-11-24l">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -145,7 +145,7 @@
       min-height: 32px; font: inherit; font-weight: 600; cursor: pointer;
     }
     .suggest-item[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 16%, var(--paper)); border-color: var(--accent); }
-    .same-light-suggest { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .same-light-suggest { margin-top: 8px; display: flex; flex-direction: column; flex-wrap: nowrap; gap: 6px; max-width: 100%; }
     .same-light-suggest:empty { display: none; }
     .same-light-chip {
       appearance: none; display: inline-flex; align-items: center; width: auto;
@@ -157,9 +157,61 @@
       background: color-mix(in srgb, var(--accent) 18%, var(--paper));
       border-color: var(--accent);
     }
-    .new-light-chip {
+    .new-light-chip, .new-light-row {
       border-style: dashed;
       font-weight: 700;
+    }
+    #whichOneWrap { margin: 0 0 6px; }
+    #whichOneWrap .which-one-row {
+      display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: center;
+    }
+    #whichOneWrap .which-one-row .label-row { margin: 0; }
+    #whichOneWrap .which-one-row label.field { font-size: .85rem; font-weight: 750; color: var(--ink); }
+    #whichOneWrap input { width: 100%; max-width: 100%; min-height: 40px; padding: 6px 10px; box-sizing: border-box; }
+    .same-light-suggest {
+      margin-top: 8px; display: flex; flex-direction: column; gap: 6px; max-width: 100%;
+    }
+    .same-light-suggest:empty { display: none; }
+    .same-light-row, .new-light-row {
+      appearance: none; display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+      width: 100%; max-width: 100%; box-sizing: border-box; text-align: left;
+      border: 1.5px solid var(--line); border-radius: 12px;
+      background: var(--chip); color: var(--ink);
+      padding: 8px 10px; min-height: 44px; font: inherit; font-weight: 650; cursor: pointer;
+      white-space: normal; overflow: visible; height: auto;
+    }
+    .same-light-row strong, .new-light-row strong {
+      font-weight: 750; font-size: .95rem; line-height: 1.25;
+      white-space: normal; overflow-wrap: break-word; word-break: normal; overflow: visible;
+    }
+    .same-light-row .sub, .new-light-row .sub {
+      font-weight: 550; font-size: .8rem; color: var(--muted); line-height: 1.35;
+      white-space: normal; overflow-wrap: break-word; word-break: normal; overflow: visible;
+    }
+    .same-light-row .same-light-note {
+      white-space: pre-wrap; margin-top: 2px; color: var(--ink);
+    }
+    .list-item, .install-slot {
+      white-space: normal; overflow: visible; height: auto;
+    }
+    .list-item strong, .install-slot strong, .list-item span, .install-slot .sub {
+      white-space: normal; overflow-wrap: break-word; word-break: normal; overflow: visible;
+    }
+    .same-light-row[aria-pressed="true"], .new-light-row[aria-pressed="true"] {
+      background: var(--accent);
+      color: var(--accent-ink);
+      border-color: var(--accent);
+    }
+    .same-light-row[aria-pressed="true"] .sub,
+    .new-light-row[aria-pressed="true"] .sub,
+    .same-light-row[aria-pressed="true"] .same-light-note {
+      color: color-mix(in srgb, var(--accent-ink) 88%, transparent);
+    }
+    .same-light-check { display: inline-block; margin-right: 6px; font-weight: 800; }
+    .suggest-label {
+      flex: 1 0 100%; font-size: .85rem; font-weight: 650; color: var(--ink);
+      margin: 0 0 2px; padding: 2px 0 0; line-height: 1.35;
+      white-space: normal; overflow-wrap: break-word;
     }
     .prompt-card { margin: 8px 0 10px; }
     #lightPlaceWrap { margin-top: 0; margin-bottom: 6px; }
@@ -178,8 +230,16 @@
     }
     .logged-row { gap: 4px; }
     @media (max-width: 400px) {
-      .field-wrap { margin: 0 0 6px; }
+      .field-wrap { margin: 0 0 4px; }
       .chip { min-height: 38px; }
+      .card { padding: 8px 10px; margin: 0 0 6px; }
+      .auto { padding: 4px 8px; margin: 0 0 6px; }
+      .topbar { margin-bottom: 6px; }
+      .tabs { margin: 0 0 6px; }
+      .pair-grid, .summary-grid { gap: 6px; }
+      #whichOneWrap input, #lightPlace { min-height: 40px; padding: 8px 10px; }
+      .which-one-row { margin-top: 4px; }
+      p, .hint { margin: 0 0 6px; }
     }
     .badge-way {
       display: inline-block; font-size: .75rem; font-weight: 700; letter-spacing: .01em;
@@ -237,7 +297,7 @@
 (() => {
   const META_KEY = "switchSurvey.meta.v1";
   const DATA_KEY = "switchSurvey.data.v2";
-  const APP_VERSION = "2026-11-24k";
+  const APP_VERSION = "2026-11-24l";
   const ITERATIONS = 150000;
   const FLOORS = ["Basement","Main","Upper","Exterior"];
   const INDOOR_ROOMS = ["Bedroom","Closet","Dining room","Family room","Foyer","Garage","Guest bath","Half bath","Hall","Kitchen","Laundry","Living room","Office","Primary bath","Primary bedroom","Stairs","Other"];
@@ -427,12 +487,97 @@
     if (!floor || floor === "Main" || floor.toLowerCase() === String(room || "").toLowerCase()) return room || floor || "";
     return locPair(floor, room) || room || floor || "";
   }
-  function controlsLabel(sw, home) {
+  function whichOneOf(sw) { return String((sw && sw.qualifier) || "").trim(); }
+  function sameQualifier(a, b) {
+    const aq = whichOneOf(a), bq = whichOneOf(b);
+    if (!aq || !bq) return true;
+    return aq.toLowerCase() === bq.toLowerCase();
+  }
+  function prettyLoadName(sw) {
+    if (!sw) return "";
+    if (isUnknown(sw)) return "Unknown";
+    if (sw.load === "Other") return ((sw.loadOther || "Other").trim() || "Other");
+    return sw.load || "";
+  }
+  function loadWithWhich(sw) {
+    const load = prettyLoadName(sw) || "Light";
+    const tag = whichOneOf(sw);
     const n = fixtureCountOf(sw);
     const count = n ? " x" + n : "";
-    const tag = sw.qualifier || "";
-    const load = isUnknown(sw) ? "Unknown" : (sw.load === "Other" ? ((sw.loadOther || "Other").trim() || "Other") : (sw.load || ""));
-    const name = [load, tag].filter(Boolean).join(" ") + count;
+    if (!tag) return load + count;
+    // Never show a bare nickname: "#2" alone is "Chandelier #2".
+    if (tag.charAt(0) === "#") return load + " " + tag + count;
+    return load + ", " + tag + count;
+  }
+  function switchOnPhrase(sw, home) {
+    const room = (home ? roomNameOf(sw, home) : "") || (sw && (sw.room === "Other" ? (sw.roomOther || "Other") : sw.room)) || (sw && sw.floor) || "";
+    const loc = locLabel(sw);
+    const gang = Number(sw && sw.gangSize) || 1;
+    const slot = Number(sw && sw.gangPosition) || 1;
+    const box = gang > 1 ? (gang + "-gang slot " + slot) : "1-gang";
+    const way = wayPositionLabel(sw, home);
+    return ["on", room, loc, box, way].filter(Boolean).join(" · ").replace(/^on · /, "on ");
+  }
+  function switchNoteText(sw) {
+    return String((sw && sw.note) || "").replace(/\s+/g, " ").trim();
+  }
+  function knownRoomNames(home) {
+    const out = [];
+    const add = (n) => {
+      n = String(n || "").trim();
+      if (!n || n === "Other") return;
+      if (out.every((x) => x.toLowerCase() !== n.toLowerCase())) out.push(n);
+    };
+    INDOOR_ROOMS.forEach(add);
+    EXTERIOR_ROOMS.forEach(add);
+    FLOORS.forEach(add);
+    add("Mudroom");
+    add("Mud room");
+    (home && home.rooms || []).forEach((r) => add(r && r.name));
+    (home && home.switches || []).forEach((s) => {
+      add(s.roomOther);
+      add(s.lightRoom);
+      add(s.lightRoomOther);
+    });
+    out.sort((a, b) => b.length - a.length);
+    return out;
+  }
+  function roomsMentionedIn(sw, home) {
+    const text = [whichOneOf(sw), switchNoteText(sw)].filter(Boolean).join(" ").trim();
+    if (!text) return [];
+    const found = [];
+    knownRoomNames(home).forEach((name) => {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp("(?:^|[^A-Za-z0-9])" + escaped + "(?:[^A-Za-z0-9]|$)", "i");
+      if (re.test(text) && found.every((f) => f.toLowerCase() !== name.toLowerCase())) found.push(name);
+    });
+    return found;
+  }
+  function sameLightPlaceBits(sw, home) {
+    const name = loadWithWhich(sw);
+    const where = lightWherePhrase(sw, home);
+    const bits = [];
+    if (lightFloorOf(sw) === "Exterior") {
+      if (where) bits.push(where);
+    } else if (where) {
+      bits.push("in " + where);
+    }
+    let already = (name + " " + bits.join(" ")).toLowerCase();
+    roomsMentionedIn(sw, home).forEach((r) => {
+      if (already.indexOf(r.toLowerCase()) === -1) {
+        bits.push(r);
+        already += " " + r.toLowerCase();
+      }
+    });
+    const note = switchNoteText(sw);
+    if (note && already.indexOf(note.toLowerCase()) === -1 && note.length <= 48) {
+      bits.push(note);
+      already += " " + note.toLowerCase();
+    }
+    return bits;
+  }
+  function controlsLabel(sw, home) {
+    const name = loadWithWhich(sw);
     if (!lightIsElsewhere(sw, home)) return name;
     const where = lightWherePhrase(sw, home);
     if (!where) return name;
@@ -492,7 +637,11 @@
       d.lightRoomOther = "";
     }
   }
+  function whichOneFieldHtml(d) {
+    return `<div class="field-wrap" id="whichOneWrap"><div class="which-one-row">${fieldHead("Which one", "whichOne", "Optional. A short name when this room has more than one of the same light, like over stairs or by front door. Lights with different names are not treated as the same light.")}<input type="text" data-field="qualifier" id="whichOne" value="${esc(d.qualifier || "")}" placeholder="over stairs, by front door" autocomplete="off" autocorrect="on" autocapitalize="off" spellcheck="true"></div></div>`;
+  }
   function lightPlaceSelectHtml(d) {
+
     const switchFloor = d.floor || "Main";
     const switchRoom = effectiveRoom(d) || "";
     const cur = currentLightPlaceValue(d);
@@ -565,25 +714,18 @@
     return SHORT_LOAD[sw.load] || (sw.load || "").toLowerCase();
   }
   function listLabel(sw, home) {
-    const n = fixtureCountOf(sw);
     const room = roomNameOf(sw, home);
-    const count = n ? " x" + n : "";
-    const tag = sw.qualifier || "";
-    const load = shortLoadName(sw);
     if (lightIsElsewhere(sw, home)) {
       const swPlace = locPair(sw.floor, room);
       return (swPlace ? swPlace + " · " : "") + controlsLabel(sw, home);
     }
-    return [room || sw.floor || "", tag, load].filter(Boolean).join(" ") + count;
+    const name = loadWithWhich(sw);
+    const short = whichOneOf(sw) ? name : ([room || sw.floor || "", sw.qualifier || "", shortLoadName(sw)].filter(Boolean).join(" ") + (fixtureCountOf(sw) ? " x" + fixtureCountOf(sw) : ""));
+    return whichOneOf(sw) ? ([room || sw.floor || "", name].filter(Boolean).join(" ")) : short;
   }
   function displayName(sw, roomName, home) {
-    const load = sw.load === "Other" ? (sw.loadOther || "Other") : sw.load;
-    const q = sw.qualifier || "";
-    const n = fixtureCountOf(sw);
-    const count = n ? " x" + n : "";
-    const base = (/^[1-4]$/.test(q)
-      ? [locPair(sw.floor, roomName), q, load].filter(Boolean).join(" ")
-      : [locPair(sw.floor, roomName), load, q].filter(Boolean).join(" ")) + count;
+    const loadBit = loadWithWhich(sw);
+    const base = [locPair(sw.floor, roomName), loadBit].filter(Boolean).join(" ");
     if (!lightIsElsewhere(sw, home)) return base;
     const where = lightWherePhrase(sw, home);
     if (!where) return base;
@@ -641,7 +783,7 @@
     return true;
   }
   function findSameLoadAndPlace(home, rec) {
-    return home.switches.filter((s) => s.id !== rec.id && canLinkLoad(s) && sameLoad(s, rec) && lightFloorOf(s) === lightFloorOf(rec) && lightRoomOf(s, home) === lightRoomOf(rec, home));
+    return home.switches.filter((s) => s.id !== rec.id && canLinkLoad(s) && sameLoad(s, rec) && sameQualifier(s, rec) && lightFloorOf(s) === lightFloorOf(rec) && lightRoomOf(s, home) === lightRoomOf(rec, home));
   }
   function uniqueLightCandidates(home, switches) {
     const seen = {}, out = [];
@@ -658,7 +800,7 @@
     return "u:" + lightFloorOf(s) + "|" + lightRoomOf(s, home) + "|" + (s.load || "") + "|" + (s.qualifier || "") + "|" + (s.loadOther || "");
   }
   function lightChipLabel(sw, home) {
-    return [locPair(lightFloorOf(sw), lightRoomOf(sw, home)), sw.qualifier || "", shortLoadName(sw)].filter(Boolean).join(" ");
+    return [locPair(lightFloorOf(sw), lightRoomOf(sw, home)), loadWithWhich(sw)].filter(Boolean).join(" ");
   }
   function uniqueLightsRecentFirst(home, exceptId) {
     const indexOf = {}, buckets = [];
@@ -699,6 +841,7 @@
     if (!sw) return;
     const d = state.draft;
     if (d.pickedLightId && samePickedLight(home, d, sw)) {
+      state.pendingMatch = null;
       d.pickedLightId = "";
       d.lightElsewhere = false;
       d.lightFloor = "";
@@ -707,6 +850,7 @@
       persist(); render();
       return;
     }
+    state.pendingMatch = null;
     d.pickedLightId = sw.id;
     d.intendNewLight = false;
     d.load = sw.load;
@@ -738,18 +882,22 @@
     return String(state.loadTyping ? (d.loadQuery || "") : loadDisplayValue(d) || "").trim();
   }
   function sameLightSuggestLabel(sw, home) {
-    const name = (sw.qualifier || (sw.load === "Other" ? (sw.loadOther || "light") : (sw.load || "light"))).trim();
-    const where = lightWherePhrase(sw, home);
-    const place = lightFloorOf(sw) === "Exterior" ? where : (where ? "in " + where : "");
-    const way = wayPositionLabel(sw, home);
-    const paren = [place, way].filter(Boolean).join(", ");
-    return paren ? ("Same light as " + name + " (" + paren + ")") : ("Same light as " + name);
+    const title = sameLightSuggestTitle(sw, home);
+    const on = switchOnPhrase(sw, home);
+    const note = switchNoteText(sw);
+    return [title, on, note].filter(Boolean).join(" ");
+  }
+  function sameLightSuggestTitle(sw, home) {
+    const name = loadWithWhich(sw);
+    const place = sameLightPlaceBits(sw, home).join(", ");
+    return place ? ("Same light as " + name + " (" + place + ")") : ("Same light as " + name);
   }
   function matchingLoggedLights(home, d) {
     if (!home || d.loggedDumb) return [];
     const q = loadQueryText(d);
     if (!q && !d.load) return [];
     return uniqueLightsRecentFirst(home, d.editId).filter((s) => {
+      if (!sameQualifier(s, d)) return false;
       if (!state.loadTyping && d.load) return sameLoad(s, d);
       if (lightMatchesQuery(s, home, q)) return true;
       if (q && s.load && s.load.toLowerCase().indexOf(q.toLowerCase()) !== -1) return true;
@@ -759,13 +907,19 @@
   function sameLightSuggestHtml(home, d) {
     const lights = matchingLoggedLights(home, d);
     if (!lights.length) return "";
-    let html = `<p class="suggest-label">Same light as…</p>`;
+    let html = `<p class="suggest-label">Is this a light you already logged? Tap it. Otherwise tap New light.</p>`;
     lights.forEach((s) => {
+      const title = sameLightSuggestTitle(s, home);
       const label = sameLightSuggestLabel(s, home);
-      const on = !!(d.pickedLightId && samePickedLight(home, d, s));
-      html += `<button type="button" class="same-light-chip" data-pick-light="${s.id}" data-label="${esc(label)}" data-load="${esc(s.load || "")}" aria-pressed="${on ? "true" : "false"}">${esc(label)}</button>`;
+      const onSw = switchOnPhrase(s, home);
+      const pressed = !!(d.pickedLightId && samePickedLight(home, d, s));
+      const note = switchNoteText(s);
+      const check = pressed ? `<span class="same-light-check" aria-hidden="true">✓</span>` : "";
+      html += `<button type="button" class="same-light-row" data-pick-light="${s.id}" data-label="${esc(label)}" data-load="${esc(s.load || "")}" aria-pressed="${pressed ? "true" : "false"}"><strong>${check}${esc(title)}</strong>${onSw ? `<span class="sub">${esc(onSw)}</span>` : ""}${note ? `<span class="sub same-light-note">${esc(note)}</span>` : ""}</button>`;
     });
-    html += `<button type="button" class="same-light-chip new-light-chip" id="suggestNewLight" aria-pressed="${d.intendNewLight ? "true" : "false"}">New light</button>`;
+    const newPressed = !!d.intendNewLight;
+    const newCheck = newPressed ? `<span class="same-light-check" aria-hidden="true">✓</span>` : "";
+    html += `<button type="button" class="same-light-row new-light-row" id="suggestNewLight" aria-pressed="${newPressed ? "true" : "false"}"><strong>${newCheck}New light</strong><span class="sub">This is a different one</span></button>`;
     return html;
   }
   function loadTypeSelectHtml(d) {
@@ -784,7 +938,7 @@
     const val = loadDisplayValue(d);
     const same = sameLightSuggestHtml(home, d);
     const hint = "Choose a type from the list, or type a name. Unknown / find out is at the top, for switches you cannot identify yet. Matching lights already logged in this home show up under the field.";
-    return `<div class="field-wrap" id="loadWrap">${fieldHead("What it controls", "load", hint)}<input type="text" id="loadQuery" data-field="loadQuery" value="${esc(val)}" placeholder="Can lights, accent lights…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="${same ? "true" : "false"}" aria-controls="sameLightSuggest"><div id="sameLightSuggest" class="same-light-suggest">${same}</div>${loadTypeSelectHtml(d)}${pendingChoiceHtml(home)}</div>`;
+    return `<div class="field-wrap" id="loadWrap">${fieldHead("What it controls", "load", hint)}<input type="text" id="loadQuery" data-field="loadQuery" value="${esc(val)}" placeholder="Can lights, accent lights…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="${same ? "true" : "false"}" aria-controls="sameLightSuggest">${loadTypeSelectHtml(d)}${whichOneFieldHtml(d)}<div id="sameLightSuggest" class="same-light-suggest">${same}</div>${pendingChoiceHtml(home)}</div>`;
   }
   function applyLoadChoice(name, other) {
     const d = state.draft;
@@ -837,6 +991,7 @@
   function suggestGuardActive() { return Date.now() < suggestGuardUntil; }
   function chooseNewLightFromSuggest() {
     const d = state.draft;
+    state.pendingMatch = null;
     d.pickedLightId = "";
     d.intendNewLight = true;
     d.lightElsewhere = false;
@@ -1545,6 +1700,7 @@
   function pendingChoiceHtml(home) {
     const p = state.pendingMatch;
     if (!p || !p.rec) return "";
+    if (state.draft && state.draft.pickedLightId) return "";
     if (p.step === "tag") {
       const suggest = p.suggested || nextAutoTag(home, p.rec);
       const cur = p.tag || "";
@@ -1554,7 +1710,7 @@
     }
     const cands = p.candidates || [];
     const load = shortLoadName(p.rec) || p.rec.load || "this light";
-    const btns = cands.map((c) => `<button type="button" class="btn primary" data-same-light="${c.id}">Same light as ${esc(listLabel(c, home))}</button>`).join("");
+    const btns = cands.map((c) => `<button type="button" class="btn primary" data-same-light="${c.id}">${esc(sameLightSuggestTitle(c, home))}</button>`).join("");
     return `<div class="card mw prompt-card" id="sameOrNew"><p>This room already has ${esc(load)}. Is this the same light, or a new one?</p><div class="stack">${btns}<button type="button" class="btn" id="newLight">New light</button></div></div>`;
   }
   function finishNewLight(tag) {
@@ -1585,22 +1741,41 @@
     const msg = autoJoinMatches(home, rec, mates);
     setHome(home); state.pendingMatch = null; flash(msg); resetDraftKeepRoom();
   }
-  function renderWalk(home) {
+  function draftRecLike(d) {
+    return {
+      floor: d.floor, room: d.room, roomOther: d.roomOther, load: d.load, loadOther: d.loadOther,
+      qualifier: d.qualifier, fixtureCount: d.fixtureCount, lightFloor: d.lightFloor,
+      lightRoom: d.lightRoom === "Other" ? (d.lightRoomOther || "Other") : d.lightRoom,
+      lightElsewhere: d.lightElsewhere, note: d.note, location: d.location, locationOther: d.locationOther,
+      gangSize: d.gangSize, gangPosition: d.gangPosition
+    };
+  }
+  function draftPreviewText(home, d) {
+    const recLike = draftRecLike(d);
+    const n = Number(d.fixtureCount);
+    const count = n > 0 ? " x" + n : "";
+    const loadBit = (d.load === "Other" ? (d.loadOther || "other") : (SHORT_LOAD[d.load] || (d.load || ""))).toString();
+    if (d.lightElsewhere) {
+      const swPlace = locPair(d.floor, effectiveRoom(d) || "Room");
+      return (swPlace ? swPlace + " · " : "") + controlsLabel(recLike, home);
+    }
+    if (n && !whichOneOf(d)) return (effectiveRoom(d) || d.floor || "") + " " + (SHORT_LOAD[d.load] || loadBit) + count;
+    return displayName(recLike, effectiveRoom(d) || "Room", home);
+  }
+  function refreshDraftPreview() {
+    const el = document.getElementById("loadPreviewText");
+    if (!el || !state.draft || !state.draft.load) return;
     const d = state.draft;
     const derived = d.load ? kindForLoad(d.load === "Other" ? "Other" : d.load) : "";
     const useKind = effectiveKind(d.kindOverride, derived);
-    const preview = (function () {
-      const n = Number(d.fixtureCount);
-      const count = n > 0 ? " x" + n : "";
-      const loadBit = (d.load === "Other" ? (d.loadOther || "other") : (SHORT_LOAD[d.load] || (d.load || ""))).toString();
-      if (d.lightElsewhere) {
-        const recLike = { floor: d.floor, room: d.room, roomOther: d.roomOther, load: d.load, loadOther: d.loadOther, qualifier: d.qualifier, fixtureCount: d.fixtureCount, lightFloor: d.lightFloor, lightRoom: d.lightRoom === "Other" ? (d.lightRoomOther || "Other") : d.lightRoom };
-        const swPlace = locPair(d.floor, effectiveRoom(d) || "Room");
-        return (swPlace ? swPlace + " · " : "") + controlsLabel(recLike, home);
-      }
-      if (n) return (effectiveRoom(d) || d.floor || "") + " " + (SHORT_LOAD[d.load] || loadBit) + count;
-      return displayName({ floor: d.floor, room: d.room, roomOther: d.roomOther, load: d.load, loadOther: d.loadOther, qualifier: d.qualifier, fixtureCount: d.fixtureCount, lightFloor: d.lightFloor, lightRoom: d.lightRoom === "Other" ? (d.lightRoomOther || "Other") : d.lightRoom, lightElsewhere: d.lightElsewhere }, effectiveRoom(d) || "Room");
-    })();
+    el.textContent = draftPreviewText(homeOf(), d) + " · " + orderHint(d, useKind) + ".";
+  }
+  function renderWalk(home) {
+
+    const d = state.draft;
+    const derived = d.load ? kindForLoad(d.load === "Other" ? "Other" : d.load) : "";
+    const useKind = effectiveKind(d.kindOverride, derived);
+    const preview = draftPreviewText(home, d);
     const fanMain = showFanTypeMain(d, useKind);
     const fanMore = showFanTypeMore(d, useKind);
     const moreHtml = `
@@ -1622,7 +1797,7 @@
         ${fanMain ? `<div class="field-wrap">${fieldHead("Fan type", "fan", "AC uses a fan switch. DC uses an on/off (constant power); speed via fan remote/integration. Not sure is listed under Verify on site and stays off the order until you choose.")}${chipRow("fanType", FAN_TYPES, fanTypeLabel(d.fanType))}</div>` : ""}
         ${!d.loggedDumb ? `<div class="field-wrap">${fieldHead("Switches in this box", "gang", "How many switches share this wall box, including this one. Most are just one.")}${chipRow("gangSize", GANG_SIZES, String(d.gangSize))}</div>` : ""}
         ${!d.loggedDumb && d.gangSize > 1 ? `<div class="field-wrap">${fieldHead("Which slot, left to right?", "slot", "Count from the left as you face the wall.")}${chipRow("gangPosition", Array.from({length:d.gangSize},(_,i)=>String(i+1)), String(d.gangPosition))}</div>` : ""}
-        ${d.load ? `<div class="auto">${esc(preview)} · ${esc(orderHint(d, useKind))}.${d.load === UNKNOWN_LOAD ? unknownBadgeHtml() : (d.load === ALWAYS_ON_LOAD ? alwaysOnBadgeHtml() : badgeHtml(draftOthers(home, d)))}</div>` : ""}
+        ${d.load ? `<div class="auto"><span id="loadPreviewText">${esc(preview)} · ${esc(orderHint(d, useKind))}.</span>${d.load === UNKNOWN_LOAD ? unknownBadgeHtml() : (d.load === ALWAYS_ON_LOAD ? alwaysOnBadgeHtml() : badgeHtml(draftOthers(home, d)))}</div>` : ""}
         <div id="more" class="${state.moreOpen ? "" : "hidden"}" style="margin-top:8px">${moreHtml}
         </div>
         <div class="stack" style="margin-top:8px">
@@ -2056,6 +2231,13 @@
           render();
           return;
         }
+        if (field === "qualifier") {
+          state.draft.qualifier = el.value;
+          persist();
+          refreshLoadSuggest();
+          refreshDraftPreview();
+          return;
+        }
         state.draft[field] = el.value;
         if (field === "room" || field === "roomOther") syncLightPlaceIfSame();
         if (field === "load") state.draft.kindOverride = "";
@@ -2286,8 +2468,12 @@
   }
   function saveSwitch(asDumb) {
     if (state.pendingMatch && state.pendingMatch.rec) {
-      flash("Choose whether this is the same light or a new one.");
-      return;
+      if (state.draft && state.draft.pickedLightId) {
+        state.pendingMatch = null;
+      } else {
+        flash("Is this a light you already logged? Tap it. Otherwise tap New light.");
+        return;
+      }
     }
     if (state.loadTyping) commitLoadQuery();
     const d = state.draft, home = homeOf();
