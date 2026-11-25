@@ -214,6 +214,13 @@ async def run():
         check("gang options include 5 and 6",
               await page.locator('[data-field="gangSize"] .chip[data-value="5"]').count() > 0
               and await page.locator('[data-field="gangSize"] .chip[data-value="6"]').count() > 0)
+        load_opts = await page.locator("#loadType option").all_text_contents()
+        check("What it controls is an A-Z type dropdown", await page.locator("#loadType").count() > 0 and await page.locator("#loadSuggest").count() == 0, load_opts)
+        check("Unknown / find out is at the top of the type list",
+              any("Unknown / find out" in (o or "") for o in load_opts)
+              and [o.strip() for o in load_opts if o.strip() and "Type or choose" not in o][0] == "Unknown / find out",
+              load_opts)
+        check("Accent lights is in the type list", "Accent lights" in load_opts)
         check("Also controlled from is gone", "Also controlled from" not in body and "Doorway or wall" not in body and "Lights already logged" not in body)
         save_box = await page.locator("#saveSw").bounding_box()
         check("Save fits on 393x852 with gang visible", bool(save_box) and save_box["y"] + save_box["height"] <= 852, save_box)
@@ -379,8 +386,8 @@ async def run():
         await page.click("[data-tab='walk']")
         await page.wait_for_timeout(80)
 
-        # After Save, the form resets for the next switch. Tapping a canned
-        # chip (not filling the field) should immediately show Same light as…
+        # After Save, the form resets for the next switch. Picking a type
+        # from the dropdown (not filling the field) should immediately show Same light as…
         await goto_walk_new_home(page, "Save reset and chip suggest")
         await pick_room_load(page, "Kitchen", "Can lights")
         await set_gang(page, 3, 1)
@@ -392,12 +399,13 @@ async def run():
               await page.locator('[data-field="gangSize"] .chip[data-value="3"][aria-pressed="true"]').count() > 0
               and await page.locator('[data-field="gangPosition"] .chip[data-value="2"][aria-pressed="true"]').count() > 0)
         check("Clear for next is still a manual reset", await page.locator("#clearDraft").count() > 0)
-        check("canned load chips are visible after save without focusing",
-              await page.locator('#loadSuggest:not(.hidden) [data-pick-load="Can lights"]').count() > 0)
-        await page.locator('[data-pick-load="Can lights"]').first.click()
+        check("type dropdown is visible after save without focusing",
+              await page.locator("#loadType").count() > 0
+              and await page.locator("#loadType option[value='Can lights']").count() > 0)
+        await page.select_option("#loadType", "Can lights")
         await page.wait_for_timeout(150)
         same = page.locator("#sameLightSuggest [data-pick-light]")
-        check("tapping a canned chip shows Same light as chips", await same.count() > 0 and await same.first.is_visible())
+        check("picking a type from the dropdown shows Same light as chips", await same.count() > 0 and await same.first.is_visible())
         body = await page.inner_text("#sameLightSuggest")
         check("same-light chip names the room", "Same light as Can lights (Kitchen)" in body)
         await shot(page, "393-dark-same-light-after-chip.png")
@@ -414,9 +422,9 @@ async def run():
         await shot(page, "393-light-same-light-after-type.png")
         await page.click("#clearDraft")
         await page.wait_for_timeout(80)
-        await page.locator('[data-pick-load="Can lights"]').first.click()
+        await page.select_option("#loadType", "Can lights")
         await page.wait_for_timeout(150)
-        check("light: tapping a canned chip shows Same light as chips",
+        check("light: picking a type from the dropdown shows Same light as chips",
               await page.locator("#sameLightSuggest [data-pick-light]").count() > 0)
         await shot(page, "393-light-same-light-after-chip.png")
         await page.emulate_media(color_scheme="dark")
@@ -804,6 +812,121 @@ async def run():
         ov = await page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1")
         check("S14 375 dark gang chips do not overflow", ov)
         await shot(page, "375-dark-6-gang-chips.png")
+        await page.set_viewport_size({"width": 393, "height": 852})
+        await page.wait_for_timeout(80)
+
+
+        # 15. Unknown / find out, no 3-way grouping, summary list, accent dropdown
+        await goto_walk_new_home(page, "S15 Unknown switches")
+        await page.set_viewport_size({"width": 393, "height": 852})
+        opts = await page.locator("#loadType option").all_text_contents()
+        real = [o.strip() for o in opts if o.strip() and "Type or choose" not in o]
+        check("S15 Unknown is the first type in the dropdown", real[0] == "Unknown / find out", real[:4])
+        check("S15 Accent lights is in the dropdown", "Accent lights" in opts)
+        await page.select_option("select[data-field='room']", "Kitchen")
+        await page.select_option("#loadType", "Unknown")
+        await page.wait_for_timeout(80)
+        body = await page.inner_text("body")
+        check("S15 picking Unknown fills the label", "Unknown / find out" in (await page.locator("#loadQuery").input_value() or "") or "Unknown" in body)
+        check("S15 Unknown does not prompt Same/New before save", not await has_same_or_new(page))
+        await set_gang(page, 2, 1)
+        await open_more(page)
+        await page.fill('textarea[data-field="note"]', "switch cover")
+        await save(page)
+        check("S15 first Unknown saves with no Same/New", not await has_same_or_new(page))
+        check("S15 after Unknown save, slot advances",
+              await page.locator('[data-field="gangPosition"] .chip[data-value="2"][aria-pressed="true"]').count() > 0)
+        await page.select_option("select[data-field='room']", "Kitchen")
+        await page.select_option("#loadType", "Unknown")
+        await page.wait_for_timeout(80)
+        await save(page)
+        check("S15 second Unknown saves with no Same/New", not await has_same_or_new(page))
+        body = await page.inner_text("body")
+        check("S15 survey order has Unknown badges", body.count("Unknown") >= 2)
+        check("S15 unknowns did not become a 3-way", "3-way" not in body and "Linked as a 3-way" not in body)
+        await page.click("[data-tab='summary']")
+        await page.wait_for_timeout(200)
+        body = await page.inner_text("body")
+        check("S15 Unknowns to identify is on Summary", "Unknowns to identify" in body)
+        check("S15 unknown list has floor, room, box, slot, and note",
+              "Kitchen" in body and "2-gang box, slot 1" in body and "switch cover" in body and "slot 2" in body)
+        check("S15 install list badges Unknown", "Unknown" in body and "identify on site" in body.lower())
+        await show_parts(page)
+        q = await qty_on(page)
+        check("S15 unknowns are not on the parts order",
+              q.get("Smart dimmer", 0) == 0 and q.get("Smart on/off", 0) == 0, q)
+        await shot(page, "393-dark-unknown-summary.png")
+        async with page.expect_download() as dl:
+            await page.click("#exportInstallCsv")
+        csvp = OUT / "s15-unknown-install.csv"
+        await (await dl.value).save_as(str(csvp))
+        csv = csvp.read_text(encoding="utf-8")
+        check("S15 install CSV marks Unknown and keeps the note", "Unknown" in csv and "switch cover" in csv, csv[:500])
+        async with page.expect_download() as dl2:
+            await page.click("#exportCsv")
+        csv2 = (await dl2.value).path()
+        shopcsv = Path(csv2).read_text(encoding="utf-8") if False else (OUT / "s15-unknown-order.csv")
+        # playwright download path — save explicitly
+        await (await dl2.value).save_as(str(OUT / "s15-unknown-order.csv"))
+        order_csv = (OUT / "s15-unknown-order.csv").read_text(encoding="utf-8")
+        check("S15 order CSV has Unknowns to identify", "UNKNOWNS TO IDENTIFY" in order_csv and "switch cover" in order_csv, order_csv[-800:])
+
+        # Dropdown still shows Same light as… when a known type is picked
+        await page.click("[data-tab='walk']")
+        await page.wait_for_timeout(80)
+        await pick_room_load(page, "Living room", "Accent lights")
+        await save(page)
+        await page.select_option("select[data-field='room']", "Office")
+        await page.select_option("#loadType", "Accent lights")
+        await page.wait_for_timeout(120)
+        same = await page.inner_text("#sameLightSuggest")
+        check("S15 dropdown pick shows Same light as Accent lights",
+              "Same light as Accent lights" in same and "Living room" in same, same)
+        await shot(page, "393-dark-accent-suggestions.png")
+        # don't save this second accent (would prompt Same/New — that's correct)
+
+        # Keyboard: type "unknown" to mark a switch
+        await page.click("#clearDraft")
+        await page.wait_for_timeout(80)
+        await page.select_option("select[data-field='room']", "Hall")
+        await page.locator("#loadQuery").click()
+        await page.locator("#loadQuery").fill("unknown")
+        await page.locator("#loadQuery").press("Enter")
+        await page.wait_for_timeout(120)
+        check("S15 typing unknown selects Unknown / find out",
+              (await page.locator("#loadType").input_value()) == "Unknown"
+              or "Unknown / find out" in (await page.locator("#loadQuery").input_value() or ""))
+        await save(page)
+        check("S15 typed Unknown saves with no Same/New", not await has_same_or_new(page))
+        await shot(page, "393-dark-unknown-walk.png")
+
+        await page.emulate_media(color_scheme="light")
+        await page.set_viewport_size({"width": 393, "height": 852})
+        await page.wait_for_timeout(80)
+        await page.click("[data-tab='summary']")
+        await page.wait_for_timeout(150)
+        await shot(page, "393-light-unknown-summary.png")
+        await page.click("[data-tab='walk']")
+        await page.wait_for_timeout(80)
+        await shot(page, "393-light-unknown-form.png")
+        for width, tag in ((375, "375"), (393, "393")):
+            await page.set_viewport_size({"width": width, "height": 667 if width == 375 else 852})
+            await page.wait_for_timeout(80)
+            ov = await page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1")
+            check(f"S15 {tag} light type dropdown does not overflow", ov)
+            await page.locator("#loadQuery").click()
+            await page.wait_for_timeout(80)
+            await shot(page, f"{tag}-light-unknown-keyboard.png")
+            await page.locator("h1").click()
+            await page.wait_for_timeout(80)
+        await page.emulate_media(color_scheme="dark")
+        await page.set_viewport_size({"width": 375, "height": 667})
+        await page.wait_for_timeout(80)
+        await shot(page, "375-dark-unknown-form.png")
+        await page.locator("#loadQuery").click()
+        await page.wait_for_timeout(80)
+        await shot(page, "375-dark-unknown-keyboard.png")
+        await page.locator("h1").click()
         await page.set_viewport_size({"width": 393, "height": 852})
         await page.wait_for_timeout(80)
 
