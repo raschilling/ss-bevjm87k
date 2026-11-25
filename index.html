@@ -13,7 +13,7 @@
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
   <meta name="robots" content="noindex, nofollow, noarchive">
   <meta name="description" content="Private switch survey.">
-  <meta name="ss-version" content="2026-11-24n">
+  <meta name="ss-version" content="2026-11-24o">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -261,6 +261,8 @@
     }
     #loadType { width: 100%; max-width: 420px; margin-top: 6px; }
     #addListInput { width: 100%; max-width: 100%; margin-top: 6px; box-sizing: border-box; }
+    .suggest-prompt { margin: 0 0 4px; font-weight: 500; }
+
 
     .unknowns-list { display: flex; flex-direction: column; gap: 8px; }
 
@@ -299,7 +301,7 @@
 (() => {
   const META_KEY = "switchSurvey.meta.v1";
   const DATA_KEY = "switchSurvey.data.v2";
-  const APP_VERSION = "2026-11-24n";
+  const APP_VERSION = "2026-11-24o";
   const ITERATIONS = 150000;
   const FLOORS = ["Basement","Main","Upper","Exterior"];
   const INDOOR_ROOMS = ["Bedroom","Closet","Dining room","Family room","Foyer","Garage","Guest bath","Half bath","Hall","Kitchen","Laundry","Living room","Office","Primary bath","Primary bedroom","Stairs","Other"];
@@ -557,13 +559,52 @@
     return load + ", " + tag + count;
   }
   function switchOnPhrase(sw, home) {
-    const room = (home ? roomNameOf(sw, home) : "") || (sw && (sw.room === "Other" ? (sw.roomOther || "Other") : sw.room)) || (sw && sw.floor) || "";
+    return switchLead(sw, home);
+  }
+  function switchRoomName(sw, home) {
+    return (home ? roomNameOf(sw, home) : "") || (sw && (sw.room === "Other" ? (sw.roomOther || "Other") : sw.room)) || (sw && sw.floor) || "";
+  }
+  function switchWhereLead(sw, home) {
+    const room = switchRoomName(sw, home);
     const loc = locLabel(sw);
+    if (room && loc) {
+      if (loc.toLowerCase().indexOf(room.toLowerCase()) !== -1) return loc;
+      return room + ", " + loc;
+    }
+    return room || loc || "";
+  }
+  function switchNumberLead(sw) {
     const gang = Number(sw && sw.gangSize) || 1;
     const slot = Number(sw && sw.gangPosition) || 1;
-    const box = gang > 1 ? (gang + "-gang slot " + slot) : "1-gang";
-    const way = wayPositionLabel(sw, home);
-    return ["on", room, loc, box, way].filter(Boolean).join(" · ").replace(/^on · /, "on ");
+    return gang + "-gang, switch " + slot;
+  }
+  function switchLead(sw, home) {
+    return [switchWhereLead(sw, home), switchNumberLead(sw)].filter(Boolean).join(" · ");
+  }
+  function lightNamePlace(sw, home) {
+    const name = loadWithWhich(sw);
+    const extras = [];
+    const already = (name || "").toLowerCase();
+    const add = (x) => {
+      x = String(x || "").trim();
+      if (!x) return;
+      if (already.indexOf(x.toLowerCase()) !== -1) return;
+      if (extras.some((e) => e.toLowerCase() === x.toLowerCase())) return;
+      extras.push(x);
+    };
+    if (lightIsElsewhere(sw, home)) {
+      const where = lightWherePhrase(sw, home);
+      if (where) add(where);
+    }
+    roomsMentionedIn(sw, home).forEach(add);
+    return extras.length ? name + " (" + extras.join(", ") + ")" : name;
+  }
+  function switchListTitle(sw, home, withWay) {
+    const lead = switchLead(sw, home);
+    const light = lightNamePlace(sw, home);
+    const way = withWay ? wayPositionLabel(sw, home) : "";
+    const right = [light, way].filter(Boolean).join(" · ");
+    return lead ? (right ? lead + " — " + right : lead) : right;
   }
   function switchNoteText(sw) {
     return String((sw && sw.note) || "").replace(/\s+/g, " ").trim();
@@ -932,14 +973,11 @@
   }
   function sameLightSuggestLabel(sw, home) {
     const title = sameLightSuggestTitle(sw, home);
-    const on = switchOnPhrase(sw, home);
     const note = switchNoteText(sw);
-    return [title, on, note].filter(Boolean).join(" ");
+    return [title, note].filter(Boolean).join(" — ");
   }
   function sameLightSuggestTitle(sw, home) {
-    const name = loadWithWhich(sw);
-    const place = sameLightPlaceBits(sw, home).join(", ");
-    return place ? ("Same light as " + name + " (" + place + ")") : ("Same light as " + name);
+    return switchListTitle(sw, home, true);
   }
   function matchingLoggedLights(home, d) {
     if (!home) return [];
@@ -956,15 +994,14 @@
   function sameLightSuggestHtml(home, d) {
     const lights = matchingLoggedLights(home, d);
     if (!lights.length) return "";
-    let html = `<p class="suggest-label">Is this a light you already logged? Tap it. Otherwise tap New light.</p>`;
+    let html = `<p class="suggest-label">Same light as</p><p class="hint suggest-prompt">Is this a light you already logged? Tap it. Otherwise tap New light.</p>`;
     lights.forEach((s) => {
       const title = sameLightSuggestTitle(s, home);
       const label = sameLightSuggestLabel(s, home);
-      const onSw = switchOnPhrase(s, home);
       const pressed = !!(d.pickedLightId && samePickedLight(home, d, s));
       const note = switchNoteText(s);
       const check = pressed ? `<span class="same-light-check" aria-hidden="true">✓</span>` : "";
-      html += `<button type="button" class="same-light-row" data-pick-light="${s.id}" data-label="${esc(label)}" data-load="${esc(s.load || "")}" aria-pressed="${pressed ? "true" : "false"}"><strong>${check}${esc(title)}</strong>${onSw ? `<span class="sub">${esc(onSw)}</span>` : ""}${note ? `<span class="sub same-light-note">${esc(note)}</span>` : ""}</button>`;
+      html += `<button type="button" class="same-light-row" data-pick-light="${s.id}" data-label="${esc(label)}" data-load="${esc(s.load || "")}" aria-pressed="${pressed ? "true" : "false"}"><strong>${check}${esc(title)}</strong>${note ? `<span class="sub same-light-note">${esc(note)}</span>` : ""}</button>`;
     });
     const newPressed = !!d.intendNewLight;
     const newCheck = newPressed ? `<span class="same-light-check" aria-hidden="true">✓</span>` : "";
@@ -1931,14 +1968,9 @@
       else if (isAlwaysOn(s) && !s.kindOverride) planSub = ALWAYS_ON_NOTE;
       else if (isDumbPlan(s)) planSub = "Keep as is (not smart) · modern standard " + dumbWayLabel(dumbWayKind(s, home));
       else if (isSmart(s)) planSub = (roleOf(s, home) === "Companion" ? "Extra switch" : "Smart") + " " + kindLabel(shopKind(s));
-      const sub = [
-        locPair(s.floor, roomNameOf(s, home)),
-        planSub,
-        locLabel(s),
-        vs,
-        isUnknown(s) && s.note ? s.note : ""
-      ].filter(Boolean).join(" · ");
-      const item = `<button type="button" class="list-item ${isUnknown(s) ? "" : (isSmart(s) ? "" : "dumb")}" data-edit="${s.id}"><strong>${i + 1}. ${esc(listLabel(s, home))}${badge}</strong><span>${esc(sub)}</span></button>`;
+      const note = switchNoteText(s);
+      const sub = [planSub, vs, note].filter(Boolean).join(" · ");
+      const item = `<button type="button" class="list-item ${isUnknown(s) ? "" : (isSmart(s) ? "" : "dumb")}" data-edit="${s.id}"><strong>${i + 1}. ${esc(switchListTitle(s, home, false))}${badge}</strong><span>${esc(sub)}</span></button>`;
       if (s.groupId) html += `<div class="logged-row">${item}<button type="button" class="btn-unlink" data-unlink="${s.id}" aria-label="Unlink">Unlink</button></div>`;
       else html += item;
     });
@@ -2146,13 +2178,17 @@
     });
   }
   function installSlotHtml(sw, home, boxSize) {
-    const slot = boxSize > 1 ? ("Slot " + (Number(sw.gangPosition) || 1) + " · ") : "";
-    const controls = controlsLabel(sw, home);
+    const loc = locLabel(sw);
+    const slotNum = Number(sw.gangPosition) || 1;
+    const num = boxSize > 1 ? ("switch " + slotNum) : switchNumberLead(sw);
+    const lead = [loc, num].filter(Boolean).join(" · ");
+    const controls = lightNamePlace(sw, home);
+    const title = lead ? (lead + " — " + controls) : controls;
     const dev = installDeviceLabel(sw, home);
     const way = otherEndsLine(sw, home);
     const role = installRoleLine(sw, home);
     const notes = installNotes(sw, home);
-    return `<div class="install-slot" data-install-slot="${sw.id}"><strong>${esc(slot + controls)}${isUnknown(sw) ? unknownBadgeHtml() : (isAlwaysOn(sw) && !sw.kindOverride ? alwaysOnBadgeHtml() : "")}</strong><span class="sub">${esc(dev.device)}</span>${way ? `<span class="sub">${esc(way)}</span>` : ""}${role ? `<span class="sub">${esc(role)}</span>` : ""}${notes.map((n) => `<span class="sub">${esc(n)}</span>`).join("")}</div>`;
+    return `<div class="install-slot" data-install-slot="${sw.id}"><strong>${esc(title)}${isUnknown(sw) ? unknownBadgeHtml() : (isAlwaysOn(sw) && !sw.kindOverride ? alwaysOnBadgeHtml() : "")}</strong><span class="sub">${esc(dev.device)}</span>${way ? `<span class="sub">${esc(way)}</span>` : ""}${role ? `<span class="sub">${esc(role)}</span>` : ""}${notes.map((n) => `<span class="sub">${esc(n)}</span>`).join("")}</div>`;
   }
   function installListHtml(home) {
     const floors = installFloors(home);

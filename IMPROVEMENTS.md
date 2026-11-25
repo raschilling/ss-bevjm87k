@@ -223,3 +223,7 @@ Every dropdown list (What it controls, Room, Light is in) has **+ Add new…**. 
 ## 2026-11-24 — Keep as is is a full log, ordered as modern decora
 
 **Keep as is** no longer skips the form or the parts list. It is a switch style: Smart switch, or Keep as is (modern standard, not smart). You still log Same/New light (3-way grouping), gang, slot, what it controls, light room, notes, and the rest. On the Install list and parts order, these are regular modern decora switches counted as single-pole, 3-way, or 4-way, in a section separate from smart parts. Existing Keep as is entries keep their data; they are included in parts where the info exists, and missing fields (like single-pole vs 3-way) are flagged to recheck, without changing the saved record. Ring camera / always-on stays off the order. Version `2026-11-24n`.
+
+## 2026-11-24 — Same light rows lead with location and switch number
+
+The Same light list says **Same light as** once, as the section heading, not on every row. Each row starts with the existing switch’s location (room and where-on-the-wall) and its number (for example “Foyer, by front door · 2-gang, switch 1”), then the light type and nickname, light room, 3-way badge, and wrapped notes. Survey order and the Install list use the same location + switch number lead when it was missing. Tapping a Same light row still selects it and closes any New light panel. Version `2026-11-24o`.
