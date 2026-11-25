@@ -203,3 +203,7 @@ Fix (version `2026-11-24f`): after **Save**, the form auto-resets for the next s
 A **Light is in** dropdown sits right under What it controls. It starts as the same room as the switch, so there is no extra tap when they match. Change it in one tap to another room, a custom name, or an outside spot (Front porch, Driveway, Yard, Garage exterior, and the rest). When the light is not in the switch room, labels say so everywhere: “Can lights (in Kitchen)” or “Exterior lights (Outside, Front porch)” — Same light suggestions, Survey order, the Install list, and CSV. 3-way matching uses the light’s room, so a Hall switch that controls Kitchen cans groups with the Kitchen switch. Old entries with no light location still use the switch room. Version `2026-11-24j`.
 
 **Same light is never pre-selected (2026-11-24j).** Picking a type like Chandelier only lists matching lights already logged; those chips stay unselected until you tap one. A **New light** chip sits next to them. A Kitchen chandelier will not auto-link to a Family room chandelier just because the type matches, and the default Light is in (same as the switch) will not auto-join a light in another room.
+
+## 2026-11-24 — Upper cabinet lights
+
+**Upper cabinet lights** is in the What it controls A–Z dropdown, after Under-cabinet (which is unchanged). It is a normal light: it defaults to a dimmer, can group as Same/New, and shows on the Install list, parts list, and CSV. Version `2026-11-24k`.

@@ -13,7 +13,7 @@
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
   <meta name="robots" content="noindex, nofollow, noarchive">
   <meta name="description" content="Private switch survey.">
-  <meta name="ss-version" content="2026-11-24j">
+  <meta name="ss-version" content="2026-11-24k">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -237,19 +237,19 @@
 (() => {
   const META_KEY = "switchSurvey.meta.v1";
   const DATA_KEY = "switchSurvey.data.v2";
-  const APP_VERSION = "2026-11-24j";
+  const APP_VERSION = "2026-11-24k";
   const ITERATIONS = 150000;
   const FLOORS = ["Basement","Main","Upper","Exterior"];
   const INDOOR_ROOMS = ["Bedroom","Closet","Dining room","Family room","Foyer","Garage","Guest bath","Half bath","Hall","Kitchen","Laundry","Living room","Office","Primary bath","Primary bedroom","Stairs","Other"];
   const EXTERIOR_ROOMS = ["Back patio","Deck","Driveway","Front porch","Garage exterior","Landscape","Side door","Yard","Other"];
-  const LOADS = ["Accent lights","Can lights","Ceiling fan","Chandelier","Closet light","Exhaust fan","Exterior lights","Fan + light","Flood lights","Lamp outlet","Pendants","Ring camera","Sconces","Under-cabinet","Vanity light","Wafer lights","Other"];
+  const LOADS = ["Accent lights","Can lights","Ceiling fan","Chandelier","Closet light","Exhaust fan","Exterior lights","Fan + light","Flood lights","Lamp outlet","Pendants","Ring camera","Sconces","Under-cabinet","Upper cabinet lights","Vanity light","Wafer lights","Other"];
   const UNKNOWN_LOAD = "Unknown";
   const UNKNOWN_LABEL = "Unknown / find out";
   const ALWAYS_ON_LOAD = "Ring camera";
   const ALWAYS_ON_NOTE = "Keep always on, don't put on a smart switch or dimmer.";
   const GANG_SIZES = ["1","2","3","4","5","6"];
-  const MULTI_FIXTURE_LOADS = ["Accent lights","Can lights","Chandelier","Exterior lights","Flood lights","Pendants","Sconces","Under-cabinet","Wafer lights"];
-  const SHORT_LOAD = {"Accent lights":"accent lights","Can lights":"cans","Wafer lights":"wafers","Sconces":"sconces","Pendants":"pendants","Under-cabinet":"under-cabinet","Chandelier":"chandelier","Flood lights":"floods","Exterior lights":"exterior lights"};
+  const MULTI_FIXTURE_LOADS = ["Accent lights","Can lights","Chandelier","Exterior lights","Flood lights","Pendants","Sconces","Under-cabinet","Upper cabinet lights","Wafer lights"];
+  const SHORT_LOAD = {"Accent lights":"accent lights","Can lights":"cans","Wafer lights":"wafers","Sconces":"sconces","Pendants":"pendants","Under-cabinet":"under-cabinet","Upper cabinet lights":"upper cabinet lights","Chandelier":"chandelier","Flood lights":"floods","Exterior lights":"exterior lights"};
   const QUALIFIERS = ["Island","Sink","Left","Right","Front","Back","Upper","Lower","#2","#3","#4"];
   const LOCATIONS = ["Entry","Hall","Top of stairs","Bottom of stairs","Garage door","Back door","Bedside","Other"];
   const BRANDS = ["Undecided","Inovelli","Lutron Caseta"];
@@ -1172,7 +1172,7 @@
     const heavy = home.switches.filter((s) => isSmart(s) && fixtureCountOf(s) >= 6);
     if (heavy.length) issues.push("Check that the total fixture wattage stays within the switch's rating for: " + heavy.map((s) => listLabel(s, home)).join("; ") + ". This matters most with many LED cans or wafers on a dimmer.");
     if (home.brand === "inovelli" && home.neutrals === "no") {
-      const smallLed = ["Can lights","Wafer lights","Pendants","Sconces","Under-cabinet"];
+      const smallLed = ["Can lights","Wafer lights","Pendants","Sconces","Under-cabinet","Upper cabinet lights"];
       const tiny = home.switches.filter((s) => isSmart(s) && smallLed.indexOf(s.load) !== -1 && fixtureCountOf(s) >= 1 && fixtureCountOf(s) <= 2);
       if (tiny.length) issues.push("Inovelli dimmers on 1–2 small LEDs without a neutral may flicker; plan an LED bypass, or add more load, for: " + tiny.map((s) => listLabel(s, home)).join("; ") + ".");
     }
