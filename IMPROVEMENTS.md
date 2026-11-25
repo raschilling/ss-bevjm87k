@@ -227,3 +227,9 @@ Every dropdown list (What it controls, Room, Light is in) has **+ Add new…**. 
 ## 2026-11-24 — Same light rows lead with location and switch number
 
 The Same light list says **Same light as** once, as the section heading, not on every row. Each row starts with the existing switch’s location (room and where-on-the-wall) and its number (for example “Foyer, by front door · 2-gang, switch 1”), then the light type and nickname, light room, 3-way badge, and wrapped notes. Survey order and the Install list use the same location + switch number lead when it was missing. Keep as is / modern standard switches show in the Same light list and can be linked, including older Keep as is entries that skipped a type. Mixed smart + Keep as is groups are allowed and flagged on the Install list so both ends can be made to match. Version `2026-11-24o`.
+
+## 2026-11-25 — Switch location vs load location, and what to order
+
+The switch’s wall room and the load’s room are no longer mashed into one unlabeled phrase. Every output uses a labeled line such as **Switch: Kitchen, 3-gang slot 2 — controls: Pendants (Dining)**. The load room is omitted when it is the same as the switch room or is blank. Notes are not treated as the load’s room. This is on the Survey list, Same light rows, 3-way/4-way group headings, the Install list, parts, CSV, and copy/paste text.
+
+The Summary now includes an **Order** section from the logged switches. Brand is an app setting that defaults to **Inovelli Blue** for new homes and is reused when you add another house (existing homes keep the brand already saved). For Inovelli Blue it counts Blue 2-1 dimmers (dimmer and on/off uses), Aux switches for the other ends of 3-ways and 4-ways, and Lutron Claro plates by gang size, with spares, a running total, and links to the Inovelli and Claro product pages. DC fan + light locations, Keep as is, unknowns, and always-on stay off the Blue/Aux counts. Version `2026-11-25a`.

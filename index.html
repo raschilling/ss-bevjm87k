@@ -13,7 +13,7 @@
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
   <meta name="robots" content="noindex, nofollow, noarchive">
   <meta name="description" content="Private switch survey.">
-  <meta name="ss-version" content="2026-11-24o">
+  <meta name="ss-version" content="2026-11-25a">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -292,6 +292,15 @@
       .order-sheet { display: none !important; }
       a { color: inherit; text-decoration: none; }
     }
+  
+    .order-buy { margin-top: 12px; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .order-buy h3 { font-size: 1rem; margin: 0 0 6px; }
+    .order-buy-table { font-size: .78rem; width: 100%; max-width: 100%; }
+    .order-buy-table th, .order-buy-table td { vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
+    .order-buy-table a { color: var(--accent); }
+    .card, #installCard, .install-list, .install-slot, .parts-table { max-width: 100%; }
+    .parts-table { overflow-wrap: anywhere; }
+
   </style>
 </head>
 <body>
@@ -301,7 +310,7 @@
 (() => {
   const META_KEY = "switchSurvey.meta.v1";
   const DATA_KEY = "switchSurvey.data.v2";
-  const APP_VERSION = "2026-11-24o";
+  const APP_VERSION = "2026-11-25a";
   const ITERATIONS = 150000;
   const FLOORS = ["Basement","Main","Upper","Exterior"];
   const INDOOR_ROOMS = ["Bedroom","Closet","Dining room","Family room","Foyer","Garage","Guest bath","Half bath","Hall","Kitchen","Laundry","Living room","Office","Primary bath","Primary bedroom","Stairs","Other"];
@@ -331,11 +340,15 @@
   };
 
   function uid(prefix) { return prefix + "_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
-  function blankHome() { return { id: uid("home"), name: "", brand: "undecided", neutrals: "yes", rooms: [], switches: [], isExample: false }; }
+  function defaultBrandOf() {
+    if (state.store && state.store.defaultBrand) return state.store.defaultBrand;
+    return "inovelli";
+  }
+  function blankHome() { return { id: uid("home"), name: "", brand: defaultBrandOf(), neutrals: "yes", rooms: [], switches: [], isExample: false }; }
   function emptyDraft(floor, room) {
     return { editId: "", floor: floor || "Main", room: room || "", roomOther: "", load: "", loadOther: "", qualifier: "", location: "", locationOther: "", gangSize: 1, gangPosition: 1, loggedDumb: false, note: "", kindOverride: "", fanType: "", otherSpots: 0, fixtureCount: "", fixtureMany: false, lightElsewhere: false, lightFloor: "", lightRoom: "", lightRoomOther: "", pickedLightId: "", intendNewLight: false, lightFilter: "", groupId: "" };
   }
-  function defaultStore() { const home = blankHome(); return { version: 1, kind: "ha-switch-survey", homes: [home], activeHomeId: home.id, customLists: { loads: [], rooms: [], locations: [] } }; }
+  function defaultStore() { const home = blankHome(); home.brand = "inovelli"; return { version: 1, kind: "ha-switch-survey", homes: [home], activeHomeId: home.id, customLists: { loads: [], rooms: [], locations: [] }, defaultBrand: "inovelli" }; }
   const ADD_NEW = "__add__";
   function customLists() {
     if (!state.store) return { loads: [], rooms: [], locations: [] };
@@ -474,7 +487,7 @@
   function isUnknown(sw) { return !!(sw && sw.load === UNKNOWN_LOAD); }
   function isAlwaysOn(sw) { return !!(sw && sw.load === ALWAYS_ON_LOAD); }
   function staysUnswitched(sw) { return (isUnknown(sw) || isAlwaysOn(sw)) && !(sw && sw.kindOverride); }
-  function canLinkLoad(sw) { return !!(sw && !isUnknown(sw) && !staysUnswitched(sw)); }
+  function canLinkLoad(sw) { return !!(sw && !isUnknown(sw)); }
   function isOpenDumb(sw) { return !!(sw && sw.loggedDumb && !(sw.load || sw.loadOther)); }
 
   function unknownBadgeHtml() { return ` <span class="badge-unknown">${esc("Unknown")}</span>`; }
@@ -568,12 +581,14 @@
   }
   function switchWhereLead(sw, home) {
     const room = switchRoomName(sw, home);
+    const floor = (sw && sw.floor) || "";
+    const place = (!floor || floor === "Main") ? room : locPair(floor === "Exterior" ? "Outside" : floor, room);
     const loc = locLabel(sw);
-    if (room && loc) {
-      if (loc.toLowerCase().indexOf(room.toLowerCase()) !== -1) return loc;
-      return room + ", " + loc;
+    if (place && loc) {
+      if (loc.toLowerCase().indexOf((place || "").toLowerCase()) !== -1) return loc;
+      return place + ", " + loc;
     }
-    return room || loc || "";
+    return place || loc || "";
   }
   function switchNumberLead(sw) {
     const gang = Number(sw && sw.gangSize) || 1;
@@ -584,29 +599,33 @@
     return [switchWhereLead(sw, home), switchNumberLead(sw)].filter(Boolean).join(" · ");
   }
   function lightNamePlace(sw, home) {
+    return loadControlsLabel(sw, home);
+  }
+  function gangSlotPhrase(sw, boxSize) {
+    const gang = Number(boxSize != null ? boxSize : (sw && sw.gangSize) || 1) || 1;
+    const slot = Number(sw && sw.gangPosition) || 1;
+    return gang > 1 ? (gang + "-gang slot " + slot) : "1-gang";
+  }
+  function switchLocationLabel(sw, home, boxSize) {
+    const where = switchWhereLead(sw, home);
+    const num = gangSlotPhrase(sw, boxSize);
+    if (where && num) return where + ", " + num;
+    return where || num;
+  }
+  function loadControlsLabel(sw, home) {
     const name = loadWithWhich(sw);
-    const extras = [];
-    const already = (name || "").toLowerCase();
-    const add = (x) => {
-      x = String(x || "").trim();
-      if (!x) return;
-      if (already.indexOf(x.toLowerCase()) !== -1) return;
-      if (extras.some((e) => e.toLowerCase() === x.toLowerCase())) return;
-      extras.push(x);
-    };
-    if (lightIsElsewhere(sw, home)) {
-      const where = lightWherePhrase(sw, home);
-      if (where) add(where);
-    }
-    roomsMentionedIn(sw, home).forEach(add);
-    return extras.length ? name + " (" + extras.join(", ") + ")" : name;
+    if (!lightIsElsewhere(sw, home)) return name;
+    const where = lightWherePhrase(sw, home);
+    if (!where) return name;
+    return name + " (" + where + ")";
+  }
+  function switchControlsLine(sw, home, boxSize) {
+    return "Switch: " + switchLocationLabel(sw, home, boxSize) + " — controls: " + loadControlsLabel(sw, home);
   }
   function switchListTitle(sw, home, withWay) {
-    const lead = switchLead(sw, home);
-    const light = lightNamePlace(sw, home);
+    const line = switchControlsLine(sw, home);
     const way = withWay ? wayPositionLabel(sw, home) : "";
-    const right = [light, way].filter(Boolean).join(" · ");
-    return lead ? (right ? lead + " — " + right : lead) : right;
+    return way ? (line + " · " + way) : line;
   }
   function switchNoteText(sw) {
     return String((sw && sw.note) || "").replace(/\s+/g, " ").trim();
@@ -667,12 +686,7 @@
     return bits;
   }
   function controlsLabel(sw, home) {
-    const name = loadWithWhich(sw);
-    if (!lightIsElsewhere(sw, home)) return name;
-    const where = lightWherePhrase(sw, home);
-    if (!where) return name;
-    if (lightFloorOf(sw) === "Exterior") return name + " (" + where + ")";
-    return name + " (in " + where + ")";
+    return loadControlsLabel(sw, home);
   }
   function currentLightPlaceValue(d) {
     if (!d.lightElsewhere) return "same";
@@ -728,7 +742,7 @@
     }
   }
   function whichOneFieldHtml(d) {
-    return `<div class="field-wrap" id="whichOneWrap"><div class="which-one-row">${fieldHead("Which one", "whichOne", "Optional. A short name when this room has more than one of the same light, like over stairs or by front door. Lights with different names are not treated as the same light.")}<input type="text" data-field="qualifier" id="whichOne" value="${esc(d.qualifier || "")}" placeholder="over stairs, by front door" autocomplete="off" autocorrect="on" autocapitalize="off" spellcheck="true"></div></div>`;
+    return `<div class="field-wrap" id="whichOneWrap"><div class="which-one-row">${fieldHead("Which one", "whichOne", "Optional. A short name when this room has more than one of the same light, like over stairs or by front door. Lights with different names are not treated as the same light.")}<input type="text" data-field="qualifier" id="whichOne" value="${esc(d.qualifier || "")}" placeholder="over stairs, by front door" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></div></div>`;
   }
   function lightPlaceSelectHtml(d) {
 
@@ -796,8 +810,7 @@
     return `<div class="label-row"><h2 style="margin:0;flex:1">${title}</h2>${info}</div>${hint}`;
   }
   function switchVsLight(sw, home) {
-    if (!lightIsElsewhere(sw, home)) return "";
-    return "Switch: " + locPair(sw.floor, roomNameOf(sw, home)) + " → Light: " + locPair(lightFloorOf(sw), lightRoomOf(sw, home));
+    return switchControlsLine(sw, home);
   }
   function fixtureCountOf(sw) { const n = Number(sw.fixtureCount); return n > 0 ? n : 0; }
   function shortLoadName(sw) {
@@ -806,24 +819,10 @@
     return SHORT_LOAD[sw.load] || (sw.load || "").toLowerCase();
   }
   function listLabel(sw, home) {
-    const room = roomNameOf(sw, home);
-    if (lightIsElsewhere(sw, home)) {
-      const swPlace = locPair(sw.floor, room);
-      return (swPlace ? swPlace + " · " : "") + controlsLabel(sw, home);
-    }
-    const name = loadWithWhich(sw);
-    const short = whichOneOf(sw) ? name : ([room || sw.floor || "", sw.qualifier || "", shortLoadName(sw)].filter(Boolean).join(" ") + (fixtureCountOf(sw) ? " x" + fixtureCountOf(sw) : ""));
-    return whichOneOf(sw) ? ([room || sw.floor || "", name].filter(Boolean).join(" ")) : short;
+    return switchControlsLine(sw, home);
   }
   function displayName(sw, roomName, home) {
-    const loadBit = loadWithWhich(sw);
-    const base = [locPair(sw.floor, roomName), loadBit].filter(Boolean).join(" ");
-    if (!lightIsElsewhere(sw, home)) return base;
-    const where = lightWherePhrase(sw, home);
-    if (!where) return base;
-    if (lightFloorOf(sw) === "Exterior") return base + " (" + where + ")";
-    if (base.indexOf("(in ") !== -1) return base;
-    return base + " (in " + where + ")";
+    return switchControlsLine(sw, home);
   }
   function roomNameOf(sw, home) { const r = (home.rooms || []).find((x) => x.id === sw.roomId); return r ? r.name : ""; }
   function isSmart(sw) {
@@ -1100,10 +1099,6 @@
     state.pendingMatch = null;
     d.pickedLightId = "";
     d.intendNewLight = true;
-    d.lightElsewhere = false;
-    d.lightFloor = "";
-    d.lightRoom = "";
-    d.lightRoomOther = "";
     persist(); render();
   }
   function bindLoadSuggest(box) {
@@ -1350,6 +1345,93 @@
     return "";
   }
   function plateName(brand, gang) { return brand === "caseta" ? "Claro " + gang + "-gang" : gang + "-gang wallplate"; }
+  function money(n) {
+    const v = Math.round(Number(n) * 100) / 100;
+    const parts = v.toFixed(2).split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return "$" + parts.join(".");
+  }
+  function blueSpares(needed) { return needed ? Math.round(needed * 0.1) : 0; }
+  function auxSpares(needed) { return needed ? 2 : 0; }
+  function plateOrderQty(gang, needed) {
+    if (!needed) return 0;
+    if (Number(gang) === 1) return Math.ceil(needed / 6) * 6;
+    if (Number(gang) === 6) return needed;
+    return needed + 1;
+  }
+  const INOVELLI_BLUE_CATALOG = {
+    dimmer: { name: "Inovelli Blue Series 2-1 Smart Dimmer (VZM31-SN)", sku: "VZM31-SN", price: 60, url: "https://inovelli.com/products/zigbee-matter-blue-series-smart-2-1-on-off-dimmer-switch" },
+    aux: { name: "Inovelli Aux (Add-On) switch", sku: "AUX01", price: 25, url: "https://inovelli.com/products/white-series-add-on-aux-switch" },
+    plates: {
+      1: { name: "Lutron Claro 1-gang screwless plate, gloss white (CW-1-WH-6)", sku: "CW-1-WH-6", price: 21.97, pack: 6, url: "https://www.homedepot.com/s/CW-1-WH-6" },
+      2: { name: "Lutron Claro 2-gang screwless plate, gloss white (CW-2-WH)", sku: "CW-2-WH", price: 9.98, url: "https://www.homedepot.com/s/CW-2-WH" },
+      3: { name: "Lutron Claro 3-gang screwless plate, gloss white (CW-3-WH)", sku: "CW-3-WH", price: 9.98, url: "https://www.homedepot.com/s/CW-3-WH" },
+      4: { name: "Lutron Claro 4-gang screwless plate, gloss white (CW-4-WH)", sku: "CW-4-WH", price: 18.58, url: "https://www.homedepot.com/s/CW-4-WH" },
+      5: { name: "Lutron Claro 5-gang screwless plate, gloss white (CW-5-WH)", sku: "CW-5-WH", price: 30.52, url: "https://www.homedepot.com/p/Lutron-Claro-5-Gang-Wall-Plate-for-Decorator-Rocker-Switches-Gloss-White-CW-5-WH-1-Pack-CW-5-WH/205930267" },
+      6: { name: "Lutron Claro 6-gang screwless plate, gloss white (CW-6-WH)", sku: "CW-6-WH", price: 50.49, url: "https://www.homedepot.com/p/Lutron-Claro-6-Gang-Wall-Plate-for-Decorator-Rocker-Switches-Gloss-White-CW-6-WH-1-Pack-CW-6-WH/205930274" }
+    }
+  };
+  function inovelliBlueOrder(home) {
+    const s = summaryOf(home);
+    const blueNeeded = (Number(s.dimmer) || 0) + (Number(s.onoff) || 0) - (Number(s.dcFanOnOff) || 0);
+    const auxNeeded = Number(s.companion) || 0;
+    const lines = [];
+    let total = 0;
+    const add = (item) => { lines.push(item); total += item.subtotal; };
+    if (blueNeeded) {
+      const sp = blueSpares(blueNeeded);
+      const qty = blueNeeded + sp;
+      const cat = INOVELLI_BLUE_CATALOG.dimmer;
+      add({ kind: "blue", item: cat.name, sku: cat.sku, url: cat.url, needed: blueNeeded, spares: sp, qty, each: cat.price, subtotal: qty * cat.price });
+    }
+    if (auxNeeded) {
+      const sp = auxSpares(auxNeeded);
+      const qty = auxNeeded + sp;
+      const cat = INOVELLI_BLUE_CATALOG.aux;
+      add({ kind: "aux", item: cat.name, sku: cat.sku, url: cat.url, needed: auxNeeded, spares: sp, qty, each: cat.price, subtotal: qty * cat.price });
+    }
+    Object.keys(s.plates || {}).map(Number).filter((g) => s.plates[g]).sort((a, b) => a - b).forEach((g) => {
+      const needed = s.plates[g];
+      const qty = plateOrderQty(g, needed);
+      const cat = INOVELLI_BLUE_CATALOG.plates[g];
+      if (!cat) return;
+      const pack = cat.pack || 1;
+      const each = cat.price;
+      const subtotal = pack > 1 ? cat.price * (qty / pack) : cat.price * qty;
+      add({ kind: "plate", gang: g, item: cat.name, sku: cat.sku, url: cat.url, needed, spares: Math.max(0, qty - needed), qty, each, pack, subtotal });
+    });
+    const dc = Number(s.dcFanOnOff) || 0;
+    let note = "Prices as of November 24, 2026, America/New_York. Tax and shipping are not included. Blue 2-1 covers dimmer and on/off uses.";
+    if (dc) note += " " + dc + " DC fan + light location" + (dc === 1 ? " is" : "s are") + " not a Blue 2-1; leave constant power.";
+    return { lines, total, blueNeeded, auxNeeded, note };
+  }
+  function orderText(home) {
+    const brand = home.brand || defaultBrandOf();
+    if (brand !== "inovelli") return "";
+    const o = inovelliBlueOrder(home);
+    if (!o.lines.length) return "";
+    const bits = ["", "Order — Inovelli Blue", "  " + o.note];
+    o.lines.forEach((l) => {
+      const spare = l.spares ? (" + " + l.spares + " spare" + (l.spares === 1 ? "" : "s")) : "";
+      bits.push("  " + l.item);
+      if (l.url) bits.push("    " + l.url);
+      bits.push("    " + l.needed + " needed" + spare + " = " + l.qty + " × " + money(l.each) + (l.pack > 1 ? (" (" + l.pack + "-pack)") : "") + " = " + money(l.subtotal));
+    });
+    bits.push("  Running total: " + money(o.total));
+    return bits.join("\n");
+  }
+  function orderHtml(home) {
+    const brand = home.brand || defaultBrandOf();
+    if (brand !== "inovelli") return "";
+    const o = inovelliBlueOrder(home);
+    if (!o.lines.length) return "";
+    const rows = o.lines.map((l) => {
+      const spare = l.spares ? ("+" + l.spares) : "—";
+      const link = l.url ? `<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">Link</a>` : "";
+      return `<tr><td>${esc(l.item)}</td><td>${l.needed}</td><td>${esc(String(spare))}</td><td>${l.qty}</td><td>${esc(money(l.each))}</td><td>${esc(money(l.subtotal))}</td><td>${link}</td></tr>`;
+    }).join("");
+    return `<div class="order-buy" id="orderBuy"><h3>Order — Inovelli Blue</h3><p class="hint">${esc(o.note)}</p><table class="order-buy-table"><thead><tr><th>Item</th><th>Needed</th><th>Spares</th><th>Order</th><th>Each</th><th>Subtotal</th><th></th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td colspan="5">Running total</td><td>${esc(money(o.total))}</td><td></td></tr></tfoot></table></div>`;
+  }
   function isDumbPlan(sw) { return !!(sw && sw.loggedDumb); }
   function dumbWayKind(sw, home) {
     const others = effectiveOthers(sw, home);
@@ -1431,7 +1513,8 @@
     });
     const plates = {};
     const buckets = {};
-    const forPlates = home.switches.filter((s) => !staysUnswitched(s));
+    // Count every logged switch, including unknown and always-on: those boxes still need a plate.
+    const forPlates = home.switches || [];
     forPlates.forEach((s) => {
       const g = Number(s.gangSize) || 1;
       const key = s.floor + "|" + roomNameOf(s, home) + "|" + g;
@@ -1447,7 +1530,7 @@
       const first = members[0];
       const load = first.load === "Other" ? (first.loadOther || "Other") : first.load;
       const others = effectiveOthers(first, home);
-      const locs = members.map((m) => { const base = locPair(m.floor, roomNameOf(m, home)) + (locLabel(m) ? " (" + locLabel(m) + ")" : ""); const vs = switchVsLight(m, home); return vs ? base + " · " + vs : base; }).join("; ");
+      const locs = members.map((m) => switchControlsLine(m, home)).join("; ");
       const extra = others + 1 > members.length ? "; " + (others + 1 - members.length) + " more not logged yet" : "";
       return { id, name: load, way: wayBadge(others) || wayLabel(members.length), locs: locs + extra, n: members.length, planned: others + 1 };
     }).filter((g) => g.planned >= 2 || g.n >= 2);
@@ -1515,6 +1598,15 @@
       ["Locations", String(s.locations)].map(csvEscape).join(","), "", "SHOPPING LIST", "Item,Qty,Part"];
     rows.forEach((r) => lines.push([r.item, r.qty, r.part].map(csvEscape).join(",")));
     if (!rows.length) lines.push("None yet,0,");
+    if ((home.brand || defaultBrandOf()) === "inovelli") {
+      const o = inovelliBlueOrder(home);
+      if (o.lines.length) {
+        lines.push("", "ORDER — INOVELLI BLUE", "Item,Needed,Spares,Order,Each,Subtotal,Link");
+        o.lines.forEach((l) => lines.push([l.item, l.needed, l.spares, l.qty, money(l.each), money(l.subtotal), l.url || ""].map(csvEscape).join(",")));
+        lines.push(["Running total", "", "", "", "", money(o.total), ""].map(csvEscape).join(","));
+        lines.push(csvEscape(o.note));
+      }
+    }
     if (notes.length) { lines.push("", "SHOPPING NOTES"); notes.forEach((n) => lines.push(csvEscape(n))); }
     if (s.verifyOnSite && s.verifyOnSite.length) {
       lines.push("", "VERIFY ON SITE", "Floor,Room,Name,Why");
@@ -1910,15 +2002,7 @@
   }
   function draftPreviewText(home, d) {
     const recLike = draftRecLike(d);
-    const n = Number(d.fixtureCount);
-    const count = n > 0 ? " x" + n : "";
-    const loadBit = (d.load === "Other" ? (d.loadOther || "other") : (SHORT_LOAD[d.load] || (d.load || ""))).toString();
-    if (d.lightElsewhere) {
-      const swPlace = locPair(d.floor, effectiveRoom(d) || "Room");
-      return (swPlace ? swPlace + " · " : "") + controlsLabel(recLike, home);
-    }
-    if (n && !whichOneOf(d)) return (effectiveRoom(d) || d.floor || "") + " " + (SHORT_LOAD[d.load] || loadBit) + count;
-    return displayName(recLike, effectiveRoom(d) || "Room", home);
+    return switchControlsLine(recLike, home);
   }
   function refreshDraftPreview() {
     const el = document.getElementById("loadPreviewText");
@@ -2207,12 +2291,7 @@
     });
   }
   function installSlotHtml(sw, home, boxSize) {
-    const loc = locLabel(sw);
-    const slotNum = Number(sw.gangPosition) || 1;
-    const num = boxSize > 1 ? ("switch " + slotNum) : switchNumberLead(sw);
-    const lead = [loc, num].filter(Boolean).join(" · ");
-    const controls = lightNamePlace(sw, home);
-    const title = lead ? (lead + " — " + controls) : controls;
+    const title = switchControlsLine(sw, home, boxSize);
     const dev = installDeviceLabel(sw, home);
     const way = otherEndsLine(sw, home);
     const role = installRoleLine(sw, home);
@@ -2232,10 +2311,9 @@
         r.boxes.forEach((b, bi) => {
           b.slots.forEach((sw) => {
             const dev = installDeviceLabel(sw, home);
-            const controls = controlsLabel(sw, home);
             lines.push([
               f.floor, r.room, b.size + "-gang", String(Number(sw.gangPosition) || 1),
-              controls, dev.device, dev.part, otherEndsLine(sw, home), installRoleLine(sw, home),
+              switchControlsLine(sw, home, b.size), dev.device, dev.part, otherEndsLine(sw, home), installRoleLine(sw, home),
               installNotes(sw, home).join(" ")
             ].map(csvEscape).join(","));
           });
@@ -2256,9 +2334,7 @@
           bits.push("    " + b.size + "-gang box");
           b.slots.forEach((sw) => {
             const dev = installDeviceLabel(sw, home);
-            const controls = controlsLabel(sw, home);
-            const slot = b.size > 1 ? "Slot " + (Number(sw.gangPosition) || 1) + ": " : "";
-            bits.push("      " + slot + controls);
+            bits.push("      " + switchControlsLine(sw, home, b.size));
             bits.push("        " + dev.device);
             const way = otherEndsLine(sw, home);
             if (way) bits.push("        " + way);
@@ -2269,6 +2345,8 @@
         });
       });
     });
+    const order = orderText(home);
+    if (order) bits.push(order);
     return bits.join("\n");
   }
   function renderSummary(home) {
@@ -2302,9 +2380,10 @@
       </div>
       <div class="summary-grid order-sheet" id="orderSheet" style="${state.summaryShowParts ? "" : "display:none"}">
       <div class="card"><h2>Parts to order</h2>
-        <table><thead><tr><th>Item</th><th>Qty</th><th>Part</th></tr></thead>
+        <table class="parts-table"><thead><tr><th>Item</th><th>Qty</th><th>Part</th></tr></thead>
         <tbody>${rows.length ? rows.map((r)=>`<tr><td>${esc(r.item)}</td><td>${r.qty}</td><td>${esc(r.part)}</td></tr>`).join("") : "<tr><td colspan=3>None yet</td></tr>"}</tbody></table>
         ${notes && notes.length ? notes.map((n)=>`<p class="hint">${esc(n)}</p>`).join("") : ""}
+        ${orderHtml(home)}
         ${s.companion ? fieldHead("Companions", "companions", "Companions are the extra switches in a 3-way or 4-way. Only one smart main is needed per light.") : ""}
         <p class="hint">${s.dumb ? (s.dumb + " modern standard (not smart) decora switch" + (s.dumb===1?"":"es") + " are on this list, separate from smart parts. ") : ""}${s.unknowns && s.unknowns.length ? s.unknowns.length + " unknown to identify (not ordered). " : ""}${s.locations} location${s.locations===1?"":"s"} logged.</p>
         <div class="stack no-print" style="margin-top:10px"><button type="button" class="btn" id="exportCsv">Export CSV order sheet</button></div>
@@ -2576,6 +2655,9 @@
     if (field === "brand") {
       const h = homeOf();
       h.brand = value === "Lutron Caseta" ? "caseta" : value === "Inovelli" ? "inovelli" : "undecided";
+      if (h.brand === "inovelli" || h.brand === "caseta") {
+        state.store.defaultBrand = h.brand;
+      }
       setHome(h); render(); return;
     }
     if (field === "qualifier" && state.draft.qualifier === value) state.draft.qualifier = "";
