@@ -13,7 +13,7 @@
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
   <meta name="robots" content="noindex, nofollow, noarchive">
   <meta name="description" content="Private switch survey.">
-  <meta name="ss-version" content="2026-11-24g">
+  <meta name="ss-version" content="2026-11-24h">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -173,6 +173,14 @@
       white-space: nowrap; background: color-mix(in srgb, var(--accent) 18%, var(--paper));
       color: var(--accent); border: 1px solid var(--accent);
     }
+    .badge-unknown {
+      display: inline-block; font-size: .75rem; font-weight: 700; letter-spacing: .01em;
+      padding: 2px 8px; border-radius: 999px; margin-left: 6px; vertical-align: middle;
+      white-space: nowrap; background: var(--warn-bg); color: var(--warn);
+      border: 1px solid var(--warn);
+    }
+    #loadType { width: 100%; max-width: 420px; margin-top: 6px; }
+    .unknowns-list { display: flex; flex-direction: column; gap: 8px; }
 
     .install-list { display: flex; flex-direction: column; gap: 14px; }
     .install-floor > h2 { margin: 0 0 6px; font-size: 1.05rem; }
@@ -209,15 +217,17 @@
 (() => {
   const META_KEY = "switchSurvey.meta.v1";
   const DATA_KEY = "switchSurvey.data.v2";
-  const APP_VERSION = "2026-11-24g";
+  const APP_VERSION = "2026-11-24h";
   const ITERATIONS = 150000;
   const FLOORS = ["Basement","Main","Upper","Exterior"];
   const INDOOR_ROOMS = ["Bedroom","Closet","Dining room","Family room","Foyer","Garage","Guest bath","Half bath","Hall","Kitchen","Laundry","Living room","Office","Primary bath","Primary bedroom","Stairs","Other"];
   const EXTERIOR_ROOMS = ["Back patio","Deck","Driveway","Front porch","Garage exterior","Landscape","Side door","Other"];
-  const LOADS = ["Can lights","Ceiling fan","Chandelier","Closet light","Exhaust fan","Exterior lights","Fan + light","Flood lights","Lamp outlet","Pendants","Sconces","Under-cabinet","Vanity light","Wafer lights","Other"];
+  const LOADS = ["Accent lights","Can lights","Ceiling fan","Chandelier","Closet light","Exhaust fan","Exterior lights","Fan + light","Flood lights","Lamp outlet","Pendants","Sconces","Under-cabinet","Vanity light","Wafer lights","Other"];
+  const UNKNOWN_LOAD = "Unknown";
+  const UNKNOWN_LABEL = "Unknown / find out";
   const GANG_SIZES = ["1","2","3","4","5","6"];
-  const MULTI_FIXTURE_LOADS = ["Can lights","Chandelier","Exterior lights","Flood lights","Pendants","Sconces","Under-cabinet","Wafer lights"];
-  const SHORT_LOAD = {"Can lights":"cans","Wafer lights":"wafers","Sconces":"sconces","Pendants":"pendants","Under-cabinet":"under-cabinet","Chandelier":"chandelier","Flood lights":"floods","Exterior lights":"exterior lights"};
+  const MULTI_FIXTURE_LOADS = ["Accent lights","Can lights","Chandelier","Exterior lights","Flood lights","Pendants","Sconces","Under-cabinet","Wafer lights"];
+  const SHORT_LOAD = {"Accent lights":"accent lights","Can lights":"cans","Wafer lights":"wafers","Sconces":"sconces","Pendants":"pendants","Under-cabinet":"under-cabinet","Chandelier":"chandelier","Flood lights":"floods","Exterior lights":"exterior lights"};
   const QUALIFIERS = ["Island","Sink","Left","Right","Front","Back","Upper","Lower","#2","#3","#4"];
   const LOCATIONS = ["Entry","Hall","Top of stairs","Bottom of stairs","Garage door","Back door","Bedside","Other"];
   const BRANDS = ["Undecided","Inovelli","Lutron Caseta"];
@@ -330,10 +340,13 @@
     return sw.location || "";
   }
   function kindForLoad(load) {
+    if (load === UNKNOWN_LOAD) return "";
     if (load === "Ceiling fan" || load === "Fan + light") return "fan";
     if (["Exhaust fan","Closet light","Flood lights","Exterior lights","Lamp outlet"].includes(load)) return "onoff";
     return "dimmer";
   }
+  function isUnknown(sw) { return !!(sw && sw.load === UNKNOWN_LOAD); }
+  function unknownBadgeHtml() { return ` <span class="badge-unknown">${esc("Unknown")}</span>`; }
   const UNSURE_DIMMABLE_NOTE = "Not sure if dimmable: set to on/off mode if the bulbs don't dim, or swap to dimmable LEDs.";
   function isUnsureDimmable(sw) { return !!(sw && sw.kindOverride === "unsure-dimmable"); }
   function kindLabel(k) { return k === "fan" ? "Fan" : k === "onoff" ? "On/off" : "Dimmer"; }
@@ -344,6 +357,7 @@
     return override || derived;
   }
   function orderHint(d, useKind) {
+    if (d.load === UNKNOWN_LOAD && !d.kindOverride) return "identify on site (not added to the parts list)";
     if (d.kindOverride === "unsure-dimmable") return "orders as a Dimmer (not sure if dimmable)";
     if (useKind === "fan") {
       const ft = d.fanType === "ac" ? "ac" : d.fanType === "dc" ? "dc" : "unknown";
@@ -412,6 +426,7 @@
   }
   function fixtureCountOf(sw) { const n = Number(sw.fixtureCount); return n > 0 ? n : 0; }
   function shortLoadName(sw) {
+    if (isUnknown(sw)) return "Unknown";
     if (sw.load === "Other") return (sw.loadOther || "other").toLowerCase();
     return SHORT_LOAD[sw.load] || (sw.load || "").toLowerCase();
   }
@@ -435,9 +450,14 @@
     return [locPair(sw.floor, roomName), load, q].filter(Boolean).join(" ") + count;
   }
   function roomNameOf(sw, home) { const r = (home.rooms || []).find((x) => x.id === sw.roomId); return r ? r.name : ""; }
-  function isSmart(sw) { return sw.loggedDumb !== true; }
+  function isSmart(sw) {
+    if (!sw || sw.loggedDumb === true) return false;
+    if (isUnknown(sw) && !sw.kindOverride) return false;
+    return true;
+  }
   function shopKind(sw) {
     if (sw.loggedDumb && !sw.groupId) return "dumb";
+    if (isUnknown(sw) && !sw.kindOverride) return "";
     if (sw.kindOverride === "unsure-dimmable") return "dimmer";
     if (sw.kindOverride) return sw.kindOverride;
     return kindForLoad(sw.load === "Other" ? (sw.loadOther || "") : sw.load);
@@ -472,6 +492,8 @@
     return home.switches.filter((s) => s.id !== rec.id && isSmart(s) && groupKeyOf(s, home) === key && !isSplitPair(s, rec));
   }
   function sameLoad(a, b) {
+    if (!a || !b) return false;
+    if (isUnknown(a) || isUnknown(b)) return false;
     if (a.load !== b.load) return false;
     if (a.load === "Other") return (a.loadOther || "").trim() === (b.loadOther || "").trim();
     return true;
@@ -499,7 +521,7 @@
   function uniqueLightsRecentFirst(home, exceptId) {
     const indexOf = {}, buckets = [];
     (home.switches || []).forEach((s, i) => {
-      if (!isSmart(s) || s.id === exceptId) return;
+      if (!isSmart(s) || isUnknown(s) || s.id === exceptId) return;
       const idKey = lightIdentityKey(s, home);
       if (indexOf[idKey] === undefined) {
         indexOf[idKey] = buckets.length;
@@ -561,6 +583,7 @@
   }
   function loadDisplayValue(d) {
     if (state.loadTyping) return d.loadQuery || "";
+    if (d.load === UNKNOWN_LOAD) return UNKNOWN_LABEL;
     if (d.load === "Other") return d.loadOther || "";
     return d.load || "";
   }
@@ -604,32 +627,23 @@
     });
     return html;
   }
-  function cannedLoadHtml(home, d) {
-    const raw = loadQueryText(d);
-    const qLow = raw.toLowerCase();
-    const filter = state.loadTyping || !(d.load);
-    let html = "";
-    LOADS.forEach((l) => {
-      if (l === "Other") return;
-      if (filter && !loadMatchesQuery(l, qLow)) return;
-      html += `<button type="button" class="suggest-item" data-pick-load="${esc(l)}" aria-pressed="${d.load===l && !d.pickedLightId ? "true" : "false"}">${esc(l)}</button>`;
+  function loadTypeSelectHtml(d) {
+    const types = LOADS.filter((l) => l !== "Other").slice().sort((a, b) => a.localeCompare(b));
+    const opts = [];
+    opts.push(`<option value="${UNKNOWN_LOAD}"${d.load === UNKNOWN_LOAD ? " selected" : ""}>${esc(UNKNOWN_LABEL)}</option>`);
+    types.forEach((l) => {
+      const on = d.load === l && !d.pickedLightId;
+      opts.push(`<option value="${esc(l)}"${on ? " selected" : ""}>${esc(l)}</option>`);
     });
-    const exact = LOADS.some((l) => l.toLowerCase() === qLow);
-    if (qLow && !exact && (state.loadTyping || d.load === "Other")) {
-      html += `<button type="button" class="suggest-item" data-pick-load="Other" data-other="${esc(raw)}">Use “${esc(raw)}” as a new light</button>`;
-    }
-    return html;
-  }
-  function showCannedLoads(d) {
-    return !d.load || !!state.loadFocused || !!state.loadTyping;
+    if (d.load === "Other") opts.push(`<option value="Other" selected>${esc((d.loadOther || "Other"))}</option>`);
+    const placeholder = (!d.load || (state.loadTyping && !d.load)) ? `<option value="" selected>Type or choose a type…</option>` : `<option value="">Type or choose a type…</option>`;
+    return `<select id="loadType" aria-label="Light type">${placeholder}${opts.join("")}</select>`;
   }
   function loadFieldHtml(home, d) {
     const val = loadDisplayValue(d);
-    const open = showCannedLoads(d);
     const same = sameLightSuggestHtml(home, d);
-    const canned = cannedLoadHtml(home, d);
-    const hint = "Type a name or tap a type. Matching lights already logged in this home show up under the field. Tapping one adds another switch for it, even from another room.";
-    return `<div class="field-wrap" id="loadWrap">${fieldHead("What it controls", "load", hint)}<input type="text" id="loadQuery" data-field="loadQuery" value="${esc(val)}" placeholder="Can lights, exhaust fan…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="${open ? "true" : "false"}" aria-controls="loadSuggest"><div id="sameLightSuggest" class="same-light-suggest">${same}</div><div id="loadSuggest" class="suggest${open ? "" : " hidden"}">${canned}</div>${pendingChoiceHtml(home)}</div>`;
+    const hint = "Choose a type from the list, or type a name. Unknown / find out is at the top, for switches you cannot identify yet. Matching lights already logged in this home show up under the field.";
+    return `<div class="field-wrap" id="loadWrap">${fieldHead("What it controls", "load", hint)}<input type="text" id="loadQuery" data-field="loadQuery" value="${esc(val)}" placeholder="Can lights, accent lights…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="${same ? "true" : "false"}" aria-controls="sameLightSuggest"><div id="sameLightSuggest" class="same-light-suggest">${same}</div>${loadTypeSelectHtml(d)}${pendingChoiceHtml(home)}</div>`;
   }
   function applyLoadChoice(name, other) {
     const d = state.draft;
@@ -662,6 +676,11 @@
       if (!d.load) return;
       return;
     }
+    const norm = raw.toLowerCase().replace(/\s+/g, " ").replace(/\//g, "/");
+    if (norm === "unknown" || norm === "unknown / find out" || norm === "unknown/find out" || norm === "find out") {
+      applyLoadChoice(UNKNOWN_LOAD, "");
+      return;
+    }
     const match = LOADS.find((l) => l.toLowerCase() === raw.toLowerCase());
     if (match) applyLoadChoice(match, "");
     else applyLoadChoice("Other", raw);
@@ -670,12 +689,7 @@
     const home = homeOf();
     const d = state.draft;
     const same = document.getElementById("sameLightSuggest");
-    const box = document.getElementById("loadSuggest");
     if (same) same.innerHTML = sameLightSuggestHtml(home, d);
-    if (box) {
-      box.innerHTML = cannedLoadHtml(home, d);
-      box.classList.toggle("hidden", !showCannedLoads(d));
-    }
     bindLoadSuggest();
   }
   function bindLoadSuggest(box) {
@@ -695,12 +709,13 @@
   function bindLoadInput() {
     const el = document.getElementById("loadQuery");
     if (!el) return;
-    const box = document.getElementById("loadSuggest");
     const wrap = document.getElementById("loadWrap");
     const show = () => {
       state.loadFocused = true;
-      if (box) { box.classList.remove("hidden"); el.setAttribute("aria-expanded", "true"); refreshLoadSuggest(); }
-      revealInView(box || el);
+      refreshLoadSuggest();
+      const same = document.getElementById("sameLightSuggest");
+      el.setAttribute("aria-expanded", same && same.innerHTML.trim() ? "true" : "false");
+      revealInView(same || el);
     };
     el.addEventListener("focus", () => {
       state.loadTyping = true;
@@ -730,13 +745,18 @@
         if (state.loadTyping) commitLoadQuery();
         else {
           state.loadFocused = false;
-          const live = document.getElementById("loadSuggest");
-          if (live && state.draft && state.draft.load) live.classList.add("hidden");
-          el.setAttribute("aria-expanded", showCannedLoads(state.draft) ? "true" : "false");
+          const same = document.getElementById("sameLightSuggest");
+          el.setAttribute("aria-expanded", same && same.innerHTML.trim() ? "true" : "false");
         }
       }, 160);
     });
-    bindLoadSuggest(wrap || box);
+    bindLoadSuggest(wrap);
+    const typeSel = document.getElementById("loadType");
+    if (typeSel) typeSel.addEventListener("change", () => {
+      const v = typeSel.value;
+      if (!v) return;
+      applyLoadChoice(v, v === "Other" ? (state.draft.loadOther || "") : "");
+    });
   }
   function showFanTypeMain(d, useKind) {
     return !d.loggedDumb && useKind === "fan" && d.load !== "Exhaust fan";
@@ -926,7 +946,9 @@
         });
       }
     };
+    const unknowns = (home.switches || []).filter(isUnknown);
     home.switches.forEach((s) => {
+      if (isUnknown(s) && !s.kindOverride) return;
       if (!isSmart(s) && !s.groupId) { dumb++; return; }
       if (s.groupId) {
         if (countedGroups.has(s.groupId)) return;
@@ -992,7 +1014,7 @@
       const tiny = home.switches.filter((s) => isSmart(s) && smallLed.indexOf(s.load) !== -1 && fixtureCountOf(s) >= 1 && fixtureCountOf(s) <= 2);
       if (tiny.length) issues.push("Inovelli dimmers on 1–2 small LEDs without a neutral may flicker; plan an LED bypass, or add more load, for: " + tiny.map((s) => listLabel(s, home)).join("; ") + ".");
     }
-    return { dimmer, onoff, fan, companion, dumb, dcFanOnOff, unsureDimmable, plates, groups, issues, verifyOnSite, locations: home.switches.length };
+    return { dimmer, onoff, fan, companion, dumb, dcFanOnOff, unsureDimmable, plates, groups, issues, verifyOnSite, unknowns, locations: home.switches.length };
   }
   function orderRows(home) {
     const brand = home.brand, s = summaryOf(home), rows = [];
@@ -1032,10 +1054,16 @@
     (home.rooms || []).forEach((room) => {
       home.switches.filter((sw) => sw.roomId === room.id).forEach((sw) => {
         const others = effectiveOthers(sw, home);
-        const plan = (others ? wayBadge(others) + " " + (roleOf(sw, home) || "Main") : "") || (sw.groupId ? wayLabel(home.switches.filter((x) => x.groupId === sw.groupId).length) + " " + roleOf(sw, home) : (sw.loggedDumb ? "Keep as is (not smart)" : needsFanType(sw) ? (fanTypeOf(sw) === "ac" ? "Smart Fan (AC)" : fanTypeOf(sw) === "dc" ? "Smart On/off (DC fan, constant power)" : "Verify on site (fan type)") : "Smart " + kindLabel(shopKind(sw))));
+        const plan = isUnknown(sw) && !sw.kindOverride ? "Unknown — identify (not ordered)" : ((others ? wayBadge(others) + " " + (roleOf(sw, home) || "Main") : "") || (sw.groupId ? wayLabel(home.switches.filter((x) => x.groupId === sw.groupId).length) + " " + roleOf(sw, home) : (sw.loggedDumb ? "Keep as is (not smart)" : needsFanType(sw) ? (fanTypeOf(sw) === "ac" ? "Smart Fan (AC)" : fanTypeOf(sw) === "dc" ? "Smart On/off (DC fan, constant power)" : "Verify on site (fan type)") : "Smart " + kindLabel(shopKind(sw)))));
         lines.push([room.floor, room.name, displayName(sw, room.name), sw.qualifier || "", fixtureCountOf(sw) || "", plan, otherSpotsLabel(others), switchVsLight(sw, home), sw.gangSize + " in box, #" + sw.gangPosition + " from left", locLabel(sw), sw.note || ""].map(csvEscape).join(","));
       });
     });
+    if (s.unknowns && s.unknowns.length) {
+      lines.push("", "UNKNOWNS TO IDENTIFY", "Floor,Room,Box,Slot,Notes");
+      s.unknowns.forEach((sw) => lines.push([
+        sw.floor || "", roomNameOf(sw, home), (Number(sw.gangSize) || 1) + "-gang", String(Number(sw.gangPosition) || 1), sw.note || ""
+      ].map(csvEscape).join(",")));
+    }
     if (s.groups.length) { lines.push("", "MULTI-WAY GROUPS", "Light,Way,Locations"); s.groups.forEach((g) => lines.push([g.name, g.way, g.locs].map(csvEscape).join(","))); }
     if (s.issues.length) { lines.push("", "OPEN ISSUES"); s.issues.forEach((i) => lines.push(csvEscape(i))); }
     return lines.join("\n");
@@ -1417,11 +1445,11 @@
         </div>
         ${d.room==="Other" ? `<div class="field-wrap">${fieldHead("Room name")}<input type="text" data-field="roomOther" value="${esc(d.roomOther)}" placeholder="Mudroom"></div>` : ""}
         ${isMultiFixture(d.load) ? (state.fixtureOpen ? `<div class="field-wrap" id="fixtureWrap">${fieldHead("Fixtures on this switch", "fixture", "Optional. How many fixtures this switch controls, e.g. 6 cans. Used only for a wattage warning at high counts, and a flicker/bypass note for 1–2 small LEDs on Inovelli without a neutral.")}${chipRow("fixtureCount", ["1","2","3","4","5","6","7","8","8+"], (d.fixtureMany || Number(d.fixtureCount) > 8) ? "8+" : (d.fixtureCount ? String(d.fixtureCount) : ""))}${(d.fixtureMany || Number(d.fixtureCount) > 8) ? `<input type="number" data-field="fixtureCount" inputmode="numeric" min="9" step="1" value="${esc(String(d.fixtureCount || ""))}" placeholder="9 or more">` : ""}<button type="button" class="fixture-add" id="fixtureHide">Hide fixture count</button></div>` : `<button type="button" class="fixture-add" id="fixtureOpen">+ fixture count</button>`) : ""}
-        ${!d.loggedDumb ? `<div class="field-wrap">${fieldHead("Switch type", "kind", "Filled in from what the switch controls. Tap once to change. Not sure if dimmable still orders a dimmer. Exhaust fans order an on/off switch.")}${chipRow("kindOverride", ["Dimmer","On/off","Fan","Not sure if dimmable"], kindChipLabel(d.kindOverride || useKind || "dimmer"))}</div>` : ""}
+        ${!d.loggedDumb && !(d.load === UNKNOWN_LOAD && !d.kindOverride) ? `<div class="field-wrap">${fieldHead("Switch type", "kind", "Filled in from what the switch controls. Tap once to change. Not sure if dimmable still orders a dimmer. Exhaust fans order an on/off switch.")}${chipRow("kindOverride", ["Dimmer","On/off","Fan","Not sure if dimmable"], kindChipLabel(d.kindOverride || useKind || "dimmer"))}</div>` : ""}
         ${fanMain ? `<div class="field-wrap">${fieldHead("Fan type", "fan", "AC uses a fan switch. DC uses an on/off (constant power); speed via fan remote/integration. Not sure is listed under Verify on site and stays off the order until you choose.")}${chipRow("fanType", FAN_TYPES, fanTypeLabel(d.fanType))}</div>` : ""}
         ${!d.loggedDumb ? `<div class="field-wrap">${fieldHead("Switches in this box", "gang", "How many switches share this wall box, including this one. Most are just one.")}${chipRow("gangSize", GANG_SIZES, String(d.gangSize))}</div>` : ""}
         ${!d.loggedDumb && d.gangSize > 1 ? `<div class="field-wrap">${fieldHead("Which slot, left to right?", "slot", "Count from the left as you face the wall.")}${chipRow("gangPosition", Array.from({length:d.gangSize},(_,i)=>String(i+1)), String(d.gangPosition))}</div>` : ""}
-        ${d.load ? `<div class="auto">${esc(preview)} · ${esc(orderHint(d, useKind))}.${badgeHtml(draftOthers(home, d))}</div>` : ""}
+        ${d.load ? `<div class="auto">${esc(preview)} · ${esc(orderHint(d, useKind))}.${d.load === UNKNOWN_LOAD ? unknownBadgeHtml() : badgeHtml(draftOthers(home, d))}</div>` : ""}
         <div id="more" class="${state.moreOpen ? "" : "hidden"}" style="margin-top:8px">${moreHtml}
         </div>
         <div class="stack" style="margin-top:8px">
@@ -1443,15 +1471,16 @@
     if (!home.switches.length) { const empty = document.createElement("div"); return empty; }
     let html = `<div class="card">${headingInfo("Survey order", "surveyOrder", "In the order you saved them. Switches for the same light are grouped automatically. Each one shows its place in the group, like 3-way 1/2 or 4-way 2/3. A single switch has no badge.")}<div class="stack">`;
     home.switches.forEach((s, i) => {
-      const badge = isSmart(s) ? positionBadgeHtml(s, home) : "";
+      const badge = isUnknown(s) ? unknownBadgeHtml() : (isSmart(s) ? positionBadgeHtml(s, home) : "");
       const vs = switchVsLight(s, home);
       const sub = [
         locPair(s.floor, roomNameOf(s, home)),
-        isSmart(s) ? ((roleOf(s, home) === "Companion" ? "Extra switch" : "Smart") + " " + kindLabel(shopKind(s))) : "Keep as is (not smart)",
+        isUnknown(s) ? (s.kindOverride ? "Unknown — " + kindLabel(shopKind(s)) + " picked" : "Unknown — identify") : (isSmart(s) ? ((roleOf(s, home) === "Companion" ? "Extra switch" : "Smart") + " " + kindLabel(shopKind(s))) : "Keep as is (not smart)"),
         locLabel(s),
-        vs
+        vs,
+        isUnknown(s) && s.note ? s.note : ""
       ].filter(Boolean).join(" · ");
-      const item = `<button type="button" class="list-item ${isSmart(s) ? "" : "dumb"}" data-edit="${s.id}"><strong>${i + 1}. ${esc(listLabel(s, home))}${badge}</strong><span>${esc(sub)}</span></button>`;
+      const item = `<button type="button" class="list-item ${isUnknown(s) ? "" : (isSmart(s) ? "" : "dumb")}" data-edit="${s.id}"><strong>${i + 1}. ${esc(listLabel(s, home))}${badge}</strong><span>${esc(sub)}</span></button>`;
       if (s.groupId) html += `<div class="logged-row">${item}<button type="button" class="btn-unlink" data-unlink="${s.id}" aria-label="Unlink">Unlink</button></div>`;
       else html += item;
     });
@@ -1478,7 +1507,7 @@
     groupMembersOf(home, group).forEach((m) => { memberIds[m.id] = true; });
     const opts = [];
     const seenG = {};
-    home.switches.filter(isSmart).forEach((s) => {
+    home.switches.filter((s) => isSmart(s) && !isUnknown(s)).forEach((s) => {
       if (memberIds[s.id]) return;
       if (s.groupId) {
         if (seenG[s.groupId]) return;
@@ -1552,6 +1581,7 @@
   }
 
   function installDeviceLabel(sw, home) {
+    if (isUnknown(sw) && !sw.kindOverride) return { device: "Unknown — identify on site (not ordered)", part: "" };
     if (!isSmart(sw) && !sw.groupId) return { device: "Keep as is (not smart) — leave this switch", part: "" };
     if (isVerifyDevice(sw, home)) return { device: "Verify on site before installing", part: "" };
     const role = roleOf(sw, home);
@@ -1656,7 +1686,7 @@
     const way = otherEndsLine(sw, home);
     const role = installRoleLine(sw, home);
     const notes = installNotes(sw, home);
-    return `<div class="install-slot" data-install-slot="${sw.id}"><strong>${esc(slot + controls)}</strong><span class="sub">${esc(dev.device)}</span>${way ? `<span class="sub">${esc(way)}</span>` : ""}${role ? `<span class="sub">${esc(role)}</span>` : ""}${notes.map((n) => `<span class="sub">${esc(n)}</span>`).join("")}</div>`;
+    return `<div class="install-slot" data-install-slot="${sw.id}"><strong>${esc(slot + controls)}${isUnknown(sw) ? unknownBadgeHtml() : ""}</strong><span class="sub">${esc(dev.device)}</span>${way ? `<span class="sub">${esc(way)}</span>` : ""}${role ? `<span class="sub">${esc(role)}</span>` : ""}${notes.map((n) => `<span class="sub">${esc(n)}</span>`).join("")}</div>`;
   }
   function installListHtml(home) {
     const floors = installFloors(home);
@@ -1671,7 +1701,7 @@
         r.boxes.forEach((b, bi) => {
           b.slots.forEach((sw) => {
             const dev = installDeviceLabel(sw, home);
-            const controls = (sw.load === "Other" ? (sw.loadOther || "Other") : sw.load) + (sw.qualifier ? " (" + sw.qualifier + ")" : "");
+            const controls = (isUnknown(sw) ? "Unknown" : (sw.load === "Other" ? (sw.loadOther || "Other") : sw.load)) + (sw.qualifier ? " (" + sw.qualifier + ")" : "");
             lines.push([
               f.floor, r.room, b.size + "-gang", String(Number(sw.gangPosition) || 1),
               controls, dev.device, dev.part, otherEndsLine(sw, home), installRoleLine(sw, home),
@@ -1719,6 +1749,15 @@
         <div class="field-wrap" style="margin-top:8px">${fieldHead("Brand", "brand", "Survey stays brand-neutral. Pick a brand when you are ready to order. The install list uses that brand’s part when you pick one.")}${chipRow("brand", BRANDS, brandVal)}</div>
         ${neutralsOverrideHtml(home)}
         </div>
+      ${s.unknowns && s.unknowns.length ? `<div class="card" id="unknownCard">${headingInfo("Unknowns to identify", "unknowns", "Switches you marked Unknown / find out. They are not grouped as 3-ways and stay off the parts list until you pick what they control, or pick a device type.")}<div class="unknowns-list">${s.unknowns.map((sw) => {
+        const room = roomNameOf(sw, home);
+        const place = locPair(sw.floor, room);
+        const size = Number(sw.gangSize) || 1;
+        const slot = Number(sw.gangPosition) || 1;
+        const box = size > 1 ? (size + "-gang box, slot " + slot) : (size + "-gang box");
+        const note = (sw.note || "").trim();
+        return `<button type="button" class="list-item" data-edit="${sw.id}"><strong>${esc(place)}${unknownBadgeHtml()}</strong><span>${esc(box)}${note ? " · " + esc(note) : ""}</span></button>`;
+      }).join("")}</div></div>` : ""}
       <div class="card" id="installCard">${headingInfo("Install list", "installList", "For the electrician, in the order you walked. Boxes are grouped by floor and room. Each slot says what to install, and where the other end of a 3-way or 4-way is.")}
         <div class="row install-actions no-print">
           <button type="button" class="btn primary" id="printInstall">Print / Save PDF</button>
@@ -1736,7 +1775,7 @@
         <tbody>${rows.length ? rows.map((r)=>`<tr><td>${esc(r.item)}</td><td>${r.qty}</td><td>${esc(r.part)}</td></tr>`).join("") : "<tr><td colspan=3>None yet</td></tr>"}</tbody></table>
         ${notes && notes.length ? notes.map((n)=>`<p class="hint">${esc(n)}</p>`).join("") : ""}
         ${s.companion ? fieldHead("Companions", "companions", "Companions are the extra switches in a 3-way or 4-way. Only one smart main is needed per light.") : ""}
-        <p class="hint">${s.dumb} Keep as is (not smart)${s.dumb===1?"":" switches"} (not ordered). ${s.locations} location${s.locations===1?"":"s"} logged.</p>
+        <p class="hint">${s.dumb} Keep as is (not smart)${s.dumb===1?"":" switches"} (not ordered). ${s.unknowns && s.unknowns.length ? s.unknowns.length + " unknown to identify (not ordered). " : ""}${s.locations} location${s.locations===1?"":"s"} logged.</p>
         <div class="stack no-print" style="margin-top:10px"><button type="button" class="btn" id="exportCsv">Export CSV order sheet</button></div>
       </div>
       <div class="summary-side">
@@ -2052,6 +2091,23 @@
     if (d.room === "Other" && !d.roomOther.trim()) { flash("Name the other room."); return; }
     if (d.load === "Other" && !d.loadOther.trim()) { flash("Name what it controls."); return; }
     const rec = recordFromDraft(home, asDumb);
+    if (isUnknown(rec)) {
+      rec.groupId = "";
+      rec.pickedLightId = "";
+      if (d.editId) {
+        const prev = home.switches.find((s) => s.id === rec.id);
+        rec.excludeIds = (prev && prev.excludeIds) || rec.excludeIds || [];
+        if (prev && prev.groupId) home.switches = unlinkMember(home.switches, rec.id);
+        home.switches = home.switches.map((s) => s.id === rec.id ? { ...s, ...rec, groupId: "" } : s);
+      } else {
+        home.switches.push(rec);
+      }
+      setHome(home);
+      state.pendingMatch = null;
+      flash("Saved as unknown — identify later.");
+      resetDraftKeepRoom();
+      return;
+    }
     if (d.editId) {
       const prev = home.switches.find((s) => s.id === rec.id);
       rec.excludeIds = (prev && prev.excludeIds) || rec.excludeIds || [];

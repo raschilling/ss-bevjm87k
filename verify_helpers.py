@@ -2,20 +2,16 @@
 import re
 
 async def choose_load(page, load):
-    item = page.locator(f'[data-pick-load="{load}"]')
-    if await item.count() and await item.first.is_visible():
-        await item.first.click()
+    sel = page.locator("#loadType")
+    if await sel.count():
+        await sel.select_option(load)
         await page.wait_for_timeout(80)
         return
     inp = page.locator("#loadQuery")
     await inp.click()
     await inp.fill(load)
     await page.wait_for_timeout(60)
-    item = page.locator(f'[data-pick-load="{load}"]')
-    if await item.count():
-        await item.first.click()
-    else:
-        await inp.press("Enter")
+    await inp.press("Enter")
     await page.wait_for_timeout(80)
 
 async def pick_existing_light(page, contains):
