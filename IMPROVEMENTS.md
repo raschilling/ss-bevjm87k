@@ -219,3 +219,7 @@ Same light suggestions are a stacked list of tappable rows under a one-line prom
 **Fluorescent lights** and **Ceiling lights** are in the What it controls A–Z list. Ceiling lights are a normal dimmer load. Fluorescent lights default to an on/off switch, and the Install list notes that an LED retrofit or on/off switch may be needed (not a dimmer by default).
 
 Every dropdown list (What it controls, Room, Light is in) has **+ Add new…**. Type a name, it is selected immediately, saved with the survey, and stays in that A–Z list for later switches. Typing does not close the keyboard. Existing saved entries are unchanged. Version `2026-11-24m`.
+
+## 2026-11-24 — Keep as is is a full log, ordered as modern decora
+
+**Keep as is** no longer skips the form or the parts list. It is a switch style: Smart switch, or Keep as is (modern standard, not smart). You still log Same/New light (3-way grouping), gang, slot, what it controls, light room, notes, and the rest. On the Install list and parts order, these are regular modern decora switches counted as single-pole, 3-way, or 4-way, in a section separate from smart parts. Existing Keep as is entries keep their data; they are included in parts where the info exists, and missing fields (like single-pole vs 3-way) are flagged to recheck, without changing the saved record. Ring camera / always-on stays off the order. Version `2026-11-24n`.
