@@ -144,7 +144,7 @@ async def read_order(page):
         "fan": q.get("Smart fan", 0),
         "companion": q.get("Companion", 0),
         "dumb": int(dm.group(1)) if dm else 0,
-        "plates": {g: q.get(f"{g}-gang wallplate", 0) for g in (1, 2, 3, 4) if q.get(f"{g}-gang wallplate", 0)},
+        "plates": {g: q.get(f"{g}-gang wallplate", 0) for g in (1, 2, 3, 4, 5, 6) if q.get(f"{g}-gang wallplate", 0)},
         "locations": int(loc.group(1)) if loc else 0,
         "verify": int(verify or 0),
         "wattage": "wattage" in body.lower(),
@@ -211,6 +211,9 @@ async def run():
         check("first launch is the survey form", "Add a switch" in body and "Save switch" in body)
         check("Keep as is (not smart) is on the form", "Keep as is (not smart)" in body and "Regular switch" not in body)
         check("gang is on the first-launch form", "Switches in this box" in body)
+        check("gang options include 5 and 6",
+              await page.locator('[data-field="gangSize"] .chip[data-value="5"]').count() > 0
+              and await page.locator('[data-field="gangSize"] .chip[data-value="6"]').count() > 0)
         check("Also controlled from is gone", "Also controlled from" not in body and "Doorway or wall" not in body and "Lights already logged" not in body)
         save_box = await page.locator("#saveSw").bounding_box()
         check("Save fits on 393x852 with gang visible", bool(save_box) and save_box["y"] + save_box["height"] <= 852, save_box)
@@ -712,6 +715,97 @@ async def run():
         check("S13 JSON has 5 switches, 3 marked unsure-dimmable", len(switches) == 5 and len(unsure) == 3, (len(switches), len(unsure)))
         notes = h.get("shoppingNotes") or data.get("shoppingNotes") or []
         check("S13 JSON shoppingNotes include the exact note", UNSURE_DIMMABLE_NOTE in notes, notes)
+
+
+        # 14. 6-gang box: slots 1–6, auto-advance, install list, parts
+        await goto_walk_new_home(page, "S14 6-gang box")
+        await page.set_viewport_size({"width": 393, "height": 852})
+        check("S14 form offers 5-gang and 6-gang",
+              await page.locator('[data-field="gangSize"] .chip[data-value="5"]').count() > 0
+              and await page.locator('[data-field="gangSize"] .chip[data-value="6"]').count() > 0)
+        await page.click('[data-field="gangSize"] .chip[data-value="5"]')
+        await page.wait_for_timeout(80)
+        check("S14 5-gang shows slots 1-5",
+              await page.locator('[data-field="gangPosition"] .chip[data-value="5"]').count() > 0
+              and await page.locator('[data-field="gangPosition"] .chip[data-value="6"]').count() == 0)
+        await pick_room_load(page, "Kitchen", "Can lights")
+        await set_gang(page, 6, 1)
+        check("S14 6-gang shows slots 1-6",
+              await page.locator('[data-field="gangPosition"] .chip[data-value="6"]').count() > 0
+              and await page.locator('[data-field="gangPosition"] .chip[data-value="7"]').count() == 0)
+        # Chip fit at 393: no horizontal overflow, all six size chips visible
+        ov = await page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1")
+        check("S14 393 gang chips do not overflow the screen", ov)
+        await shot(page, "393-dark-6-gang-form.png")
+        await save(page)
+        check("S14 after slot 1, advances to slot 2",
+              await page.locator('[data-field="gangSize"] .chip[data-value="6"][aria-pressed="true"]').count() > 0
+              and await page.locator('[data-field="gangPosition"] .chip[data-value="2"][aria-pressed="true"]').count() > 0)
+        six_loads = ["Pendants", "Under-cabinet", "Lamp outlet", "Exhaust fan", "Sconces"]
+        for i, load in enumerate(six_loads, start=2):
+            await pick_room_load(page, "Kitchen", load)
+            pressed = await page.locator(f'[data-field="gangPosition"] .chip[data-value="{i}"][aria-pressed="true"]').count()
+            check(f"S14 slot {i} is ready after previous save", pressed > 0)
+            await save(page)
+        check("S14 after slot 6, gang resets to 1",
+              await page.locator('[data-field="gangSize"] .chip[data-value="1"][aria-pressed="true"]').count() > 0)
+        ok, actual, body = await assert_order(page, "S14 6-gang kitchen box", {
+            "dimmer": 4, "onoff": 2, "fan": 0, "companion": 0, "dumb": 0,
+            "plates": {6: 1}, "locations": 6, "verify": 0
+        })
+        check("S14 install list shows a 6-gang box", "6-gang box" in body)
+        check("S14 install list has slots 1-6",
+              all(f"Slot {n}" in body for n in range(1, 7)))
+        await show_parts(page)
+        parts = await page.inner_text("body")
+        check("S14 parts list has a 6-gang wallplate", "6-gang wallplate" in parts)
+        await shot(page, "393-dark-6-gang-install.png")
+        async with page.expect_download() as dl:
+            await page.click("#exportCsv")
+        csvp = OUT / "s14-6-gang.csv"
+        await (await dl.value).save_as(str(csvp))
+        csv = csvp.read_text(encoding="utf-8")
+        shop = await parse_csv_shop(csv)
+        check("S14 CSV has 4 dimmers, 2 on/off, one 6-gang plate",
+              shop.get("Smart dimmer") == 4 and shop.get("Smart on/off") == 2 and shop.get("6-gang wallplate") == 1, shop)
+        await page.emulate_media(color_scheme="light")
+        await page.wait_for_timeout(80)
+        await shot(page, "393-light-6-gang-install.png")
+        await page.click("[data-tab='walk']")
+        await page.wait_for_timeout(80)
+        await page.click('[data-field="gangSize"] .chip[data-value="6"]')
+        await page.wait_for_timeout(80)
+        await shot(page, "393-light-6-gang-form.png")
+        for width, tag in ((375, "375"), (393, "393")):
+            await page.set_viewport_size({"width": width, "height": 667 if width == 375 else 852})
+            await page.wait_for_timeout(80)
+            ov = await page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1")
+            check(f"S14 {tag} light gang chips do not overflow", ov)
+            # chips should be visible and not overlapping
+            fit = await page.evaluate("""() => {
+              const chips = [...document.querySelectorAll('[data-field="gangSize"] .chip')];
+              if (chips.length < 6) return {ok:false, n: chips.length};
+              const boxes = chips.map((c) => c.getBoundingClientRect());
+              if (boxes.some((b) => b.width < 8 || b.height < 24)) return {ok:false, boxes};
+              for (let i = 0; i < boxes.length; i++) {
+                for (let j = i + 1; j < boxes.length; j++) {
+                  const a = boxes[i], b = boxes[j];
+                  const overlap = a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
+                  if (overlap) return {ok:false, overlap:[i,j]};
+                }
+              }
+              return {ok:true, n: chips.length, rows: new Set(boxes.map((b) => Math.round(b.top))).size};
+            }""")
+            check(f"S14 {tag} light gang chips fit without crowding", bool(fit) and fit.get("ok"), fit)
+            await shot(page, f"{tag}-light-6-gang-chips.png")
+        await page.emulate_media(color_scheme="dark")
+        await page.set_viewport_size({"width": 375, "height": 667})
+        await page.wait_for_timeout(80)
+        ov = await page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1")
+        check("S14 375 dark gang chips do not overflow", ov)
+        await shot(page, "375-dark-6-gang-chips.png")
+        await page.set_viewport_size({"width": 393, "height": 852})
+        await page.wait_for_timeout(80)
 
         # Light theme screenshots of walk form + summary, chips visible
         await page.click("[data-tab='homes']")

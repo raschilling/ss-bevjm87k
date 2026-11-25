@@ -13,7 +13,7 @@
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
   <meta name="robots" content="noindex, nofollow, noarchive">
   <meta name="description" content="Private switch survey.">
-  <meta name="ss-version" content="2026-11-24f">
+  <meta name="ss-version" content="2026-11-24g">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -209,12 +209,13 @@
 (() => {
   const META_KEY = "switchSurvey.meta.v1";
   const DATA_KEY = "switchSurvey.data.v2";
-  const APP_VERSION = "2026-11-24f";
+  const APP_VERSION = "2026-11-24g";
   const ITERATIONS = 150000;
   const FLOORS = ["Basement","Main","Upper","Exterior"];
   const INDOOR_ROOMS = ["Bedroom","Closet","Dining room","Family room","Foyer","Garage","Guest bath","Half bath","Hall","Kitchen","Laundry","Living room","Office","Primary bath","Primary bedroom","Stairs","Other"];
   const EXTERIOR_ROOMS = ["Back patio","Deck","Driveway","Front porch","Garage exterior","Landscape","Side door","Other"];
   const LOADS = ["Can lights","Ceiling fan","Chandelier","Closet light","Exhaust fan","Exterior lights","Fan + light","Flood lights","Lamp outlet","Pendants","Sconces","Under-cabinet","Vanity light","Wafer lights","Other"];
+  const GANG_SIZES = ["1","2","3","4","5","6"];
   const MULTI_FIXTURE_LOADS = ["Can lights","Chandelier","Exterior lights","Flood lights","Pendants","Sconces","Under-cabinet","Wafer lights"];
   const SHORT_LOAD = {"Can lights":"cans","Wafer lights":"wafers","Sconces":"sconces","Pendants":"pendants","Under-cabinet":"under-cabinet","Chandelier":"chandelier","Flood lights":"floods","Exterior lights":"exterior lights"};
   const QUALIFIERS = ["Island","Sink","Left","Right","Front","Back","Upper","Lower","#2","#3","#4"];
@@ -941,7 +942,7 @@
       countMain(s);
       companion += Number(s.otherSpots) || 0;
     });
-    const plates = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    const plates = {};
     const buckets = {};
     const forPlates = home.switches.filter((s) => isSmart(s) || s.groupId);
     forPlates.forEach((s) => {
@@ -1004,7 +1005,7 @@
     add("Smart on/off", s.onoff, "onoff");
     add("Smart fan", s.fan, "fan");
     add("Companion", s.companion, "companion");
-    [1,2,3,4].forEach((g) => add(g + "-gang wallplate", s.plates[g], "plate"));
+    Object.keys(s.plates || {}).map(Number).filter((g) => s.plates[g]).sort((a, b) => a - b).forEach((g) => add(g + "-gang wallplate", s.plates[g], "plate"));
     const notes = [];
     if (s.dcFanOnOff) notes.push((s.dcFanOnOff === s.onoff ? "These on/off switches" : (s.dcFanOnOff + " of these on/off switches")) + " are for DC fans (constant power). Speed via fan remote/integration.");
     if (s.unsureDimmable) {
@@ -1418,7 +1419,7 @@
         ${isMultiFixture(d.load) ? (state.fixtureOpen ? `<div class="field-wrap" id="fixtureWrap">${fieldHead("Fixtures on this switch", "fixture", "Optional. How many fixtures this switch controls, e.g. 6 cans. Used only for a wattage warning at high counts, and a flicker/bypass note for 1–2 small LEDs on Inovelli without a neutral.")}${chipRow("fixtureCount", ["1","2","3","4","5","6","7","8","8+"], (d.fixtureMany || Number(d.fixtureCount) > 8) ? "8+" : (d.fixtureCount ? String(d.fixtureCount) : ""))}${(d.fixtureMany || Number(d.fixtureCount) > 8) ? `<input type="number" data-field="fixtureCount" inputmode="numeric" min="9" step="1" value="${esc(String(d.fixtureCount || ""))}" placeholder="9 or more">` : ""}<button type="button" class="fixture-add" id="fixtureHide">Hide fixture count</button></div>` : `<button type="button" class="fixture-add" id="fixtureOpen">+ fixture count</button>`) : ""}
         ${!d.loggedDumb ? `<div class="field-wrap">${fieldHead("Switch type", "kind", "Filled in from what the switch controls. Tap once to change. Not sure if dimmable still orders a dimmer. Exhaust fans order an on/off switch.")}${chipRow("kindOverride", ["Dimmer","On/off","Fan","Not sure if dimmable"], kindChipLabel(d.kindOverride || useKind || "dimmer"))}</div>` : ""}
         ${fanMain ? `<div class="field-wrap">${fieldHead("Fan type", "fan", "AC uses a fan switch. DC uses an on/off (constant power); speed via fan remote/integration. Not sure is listed under Verify on site and stays off the order until you choose.")}${chipRow("fanType", FAN_TYPES, fanTypeLabel(d.fanType))}</div>` : ""}
-        ${!d.loggedDumb ? `<div class="field-wrap">${fieldHead("Switches in this box", "gang", "How many switches share this wall box, including this one. Most are just one.")}${chipRow("gangSize", ["1","2","3","4"], String(d.gangSize))}</div>` : ""}
+        ${!d.loggedDumb ? `<div class="field-wrap">${fieldHead("Switches in this box", "gang", "How many switches share this wall box, including this one. Most are just one.")}${chipRow("gangSize", GANG_SIZES, String(d.gangSize))}</div>` : ""}
         ${!d.loggedDumb && d.gangSize > 1 ? `<div class="field-wrap">${fieldHead("Which slot, left to right?", "slot", "Count from the left as you face the wall.")}${chipRow("gangPosition", Array.from({length:d.gangSize},(_,i)=>String(i+1)), String(d.gangPosition))}</div>` : ""}
         ${d.load ? `<div class="auto">${esc(preview)} · ${esc(orderHint(d, useKind))}.${badgeHtml(draftOthers(home, d))}</div>` : ""}
         <div id="more" class="${state.moreOpen ? "" : "hidden"}" style="margin-top:8px">${moreHtml}

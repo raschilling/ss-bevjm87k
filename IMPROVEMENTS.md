@@ -178,3 +178,8 @@ Andrew on a real iPhone (2026-11-24e) reported that he only saw canned load type
 Cause: “Same light as…” lived in the same scrollable suggestion list as the canned types, *below* all 14 type chips, inside a 220px-tall box — easy to miss on a phone. Tapping a canned chip also closed that list (`loadFocused = false`), so matches for that type never appeared. Suggestions required the text field to be focused. If the previous switch was still on the form (or he was looking only at the type chips), the logged-light matches stayed hidden.
 
 Fix (version `2026-11-24f`): after **Save**, the form auto-resets for the next switch — floor and room stay, load / type / notes clear, and the slot advances when the box has more gangs. **Clear for next** remains as a manual reset (including gang/slot back to 1). Canned type chips stay visible under the field after a save, so they can be tapped with no extra focus. Tapping a type chip or typing immediately shows matching lights already logged in this home as visible chips under the field, labeled like `Same light as Can lights (Kitchen, 3-way 1/2)`. If none match, that row stays empty. This is a chip row, not a hidden `<datalist>`.
+
+
+## 2026-11-24 — 5-gang and 6-gang boxes
+
+**Switches in this box** now goes to 6, and **Which slot** offers 1–6 to match. After Save, the slot still advances until the last position in that box, then the form resets to a 1-gang box for the next one. The Install list, parts/order sheet, and CSV count 5-gang and 6-gang wallplates and group those slots into one box. Existing 1–4 gang surveys are unchanged. Version `2026-11-24g`.
