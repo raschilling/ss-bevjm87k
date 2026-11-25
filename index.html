@@ -13,7 +13,7 @@
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
   <meta name="robots" content="noindex, nofollow, noarchive">
   <meta name="description" content="Private switch survey.">
-  <meta name="ss-version" content="2026-11-24l">
+  <meta name="ss-version" content="2026-11-24m">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -260,6 +260,8 @@
       border: 1px solid var(--warn);
     }
     #loadType { width: 100%; max-width: 420px; margin-top: 6px; }
+    #addListInput { width: 100%; max-width: 100%; margin-top: 6px; box-sizing: border-box; }
+
     .unknowns-list { display: flex; flex-direction: column; gap: 8px; }
 
     .install-list { display: flex; flex-direction: column; gap: 14px; }
@@ -297,19 +299,19 @@
 (() => {
   const META_KEY = "switchSurvey.meta.v1";
   const DATA_KEY = "switchSurvey.data.v2";
-  const APP_VERSION = "2026-11-24l";
+  const APP_VERSION = "2026-11-24m";
   const ITERATIONS = 150000;
   const FLOORS = ["Basement","Main","Upper","Exterior"];
   const INDOOR_ROOMS = ["Bedroom","Closet","Dining room","Family room","Foyer","Garage","Guest bath","Half bath","Hall","Kitchen","Laundry","Living room","Office","Primary bath","Primary bedroom","Stairs","Other"];
   const EXTERIOR_ROOMS = ["Back patio","Deck","Driveway","Front porch","Garage exterior","Landscape","Side door","Yard","Other"];
-  const LOADS = ["Accent lights","Can lights","Ceiling fan","Chandelier","Closet light","Exhaust fan","Exterior lights","Fan + light","Flood lights","Lamp outlet","Pendants","Ring camera","Sconces","Under-cabinet","Upper cabinet lights","Vanity light","Wafer lights","Other"];
+  const LOADS = ["Accent lights","Can lights","Ceiling fan","Ceiling lights","Chandelier","Closet light","Exhaust fan","Exterior lights","Fan + light","Flood lights","Fluorescent lights","Lamp outlet","Pendants","Ring camera","Sconces","Under-cabinet","Upper cabinet lights","Vanity light","Wafer lights","Other"];
   const UNKNOWN_LOAD = "Unknown";
   const UNKNOWN_LABEL = "Unknown / find out";
   const ALWAYS_ON_LOAD = "Ring camera";
   const ALWAYS_ON_NOTE = "Keep always on, don't put on a smart switch or dimmer.";
   const GANG_SIZES = ["1","2","3","4","5","6"];
-  const MULTI_FIXTURE_LOADS = ["Accent lights","Can lights","Chandelier","Exterior lights","Flood lights","Pendants","Sconces","Under-cabinet","Upper cabinet lights","Wafer lights"];
-  const SHORT_LOAD = {"Accent lights":"accent lights","Can lights":"cans","Wafer lights":"wafers","Sconces":"sconces","Pendants":"pendants","Under-cabinet":"under-cabinet","Upper cabinet lights":"upper cabinet lights","Chandelier":"chandelier","Flood lights":"floods","Exterior lights":"exterior lights"};
+  const MULTI_FIXTURE_LOADS = ["Accent lights","Can lights","Ceiling lights","Chandelier","Exterior lights","Flood lights","Fluorescent lights","Pendants","Sconces","Under-cabinet","Upper cabinet lights","Wafer lights"];
+  const SHORT_LOAD = {"Accent lights":"accent lights","Can lights":"cans","Wafer lights":"wafers","Sconces":"sconces","Pendants":"pendants","Under-cabinet":"under-cabinet","Upper cabinet lights":"upper cabinet lights","Chandelier":"chandelier","Ceiling lights":"ceiling lights","Flood lights":"floods","Fluorescent lights":"fluorescent lights","Exterior lights":"exterior lights"};
   const QUALIFIERS = ["Island","Sink","Left","Right","Front","Back","Upper","Lower","#2","#3","#4"];
   const LOCATIONS = ["Entry","Hall","Top of stairs","Bottom of stairs","Garage door","Back door","Bedside","Other"];
   const BRANDS = ["Undecided","Inovelli","Lutron Caseta"];
@@ -323,7 +325,7 @@
   const state = {
     migrating: false, migrateBuf: "", migrateError: "", migrateForgot: 0, migrateBusy: false,
     store: null, tab: "walk", summaryShowParts: false,
-    draft: emptyDraft("Main", ""), pendingMatch: null, moreOpen: false, openHints: {}, fixtureOpen: false, flash: "", storageOk: true, storageNote: ""
+    draft: emptyDraft("Main", ""), pendingMatch: null, moreOpen: false, addingList: "", openHints: {}, fixtureOpen: false, flash: "", storageOk: true, storageNote: ""
   };
 
   function uid(prefix) { return prefix + "_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
@@ -331,7 +333,47 @@
   function emptyDraft(floor, room) {
     return { editId: "", floor: floor || "Main", room: room || "", roomOther: "", load: "", loadOther: "", qualifier: "", location: "", locationOther: "", gangSize: 1, gangPosition: 1, loggedDumb: false, note: "", kindOverride: "", fanType: "", otherSpots: 0, fixtureCount: "", fixtureMany: false, lightElsewhere: false, lightFloor: "", lightRoom: "", lightRoomOther: "", pickedLightId: "", intendNewLight: false, lightFilter: "", groupId: "" };
   }
-  function defaultStore() { const home = blankHome(); return { version: 1, kind: "ha-switch-survey", homes: [home], activeHomeId: home.id }; }
+  function defaultStore() { const home = blankHome(); return { version: 1, kind: "ha-switch-survey", homes: [home], activeHomeId: home.id, customLists: { loads: [], rooms: [], locations: [] } }; }
+  const ADD_NEW = "__add__";
+  function customLists() {
+    if (!state.store) return { loads: [], rooms: [], locations: [] };
+    if (!state.store.customLists || typeof state.store.customLists !== "object") {
+      state.store.customLists = { loads: [], rooms: [], locations: [] };
+    }
+    const c = state.store.customLists;
+    if (!Array.isArray(c.loads)) c.loads = [];
+    if (!Array.isArray(c.rooms)) c.rooms = [];
+    if (!Array.isArray(c.locations)) c.locations = [];
+    return c;
+  }
+  function addCustomItem(kind, name) {
+    const n = String(name || "").replace(/\s+/g, " ").trim();
+    if (!n || n === "Other" || n === "+ Add new…") return "";
+    const c = customLists();
+    const arr = c[kind] || (c[kind] = []);
+    const hit = arr.find((x) => x.toLowerCase() === n.toLowerCase());
+    if (!hit) {
+      arr.push(n);
+      arr.sort((a, b) => a.localeCompare(b));
+    }
+    persist();
+    return hit || n;
+  }
+  function mergeCustom(base, extra, otherLast) {
+    const built = (base || []).filter((x) => x !== "Other");
+    const more = (extra || []).filter((n) => n && n !== "Other" && built.every((b) => b.toLowerCase() !== n.toLowerCase()));
+    const list = built.concat(more).sort((a, b) => a.localeCompare(b));
+    if (otherLast && (base || []).indexOf("Other") !== -1) list.push("Other");
+    return list;
+  }
+  function allLoads() {
+    return mergeCustom(LOADS.filter((l) => l !== "Other"), customLists().loads, false);
+  }
+  function addNewInputHtml(kind, placeholder) {
+    if (state.addingList !== kind) return "";
+    return `<input type="text" id="addListInput" data-add-list="${esc(kind)}" value="" placeholder="${esc(placeholder)}" autocomplete="off" autocorrect="on" autocapitalize="words" spellcheck="true">`;
+  }
+
   function sensibleExteriorSpot(sw) {
     if (!sw) return "Other";
     const other = ((sw.loadOther || sw.note || "") + "").toLowerCase();
@@ -424,7 +466,7 @@
   function kindForLoad(load) {
     if (load === UNKNOWN_LOAD || load === ALWAYS_ON_LOAD) return "";
     if (load === "Ceiling fan" || load === "Fan + light") return "fan";
-    if (["Exhaust fan","Closet light","Flood lights","Exterior lights","Lamp outlet"].includes(load)) return "onoff";
+    if (["Exhaust fan","Closet light","Flood lights","Fluorescent lights","Exterior lights","Lamp outlet"].includes(load)) return "onoff";
     return "dimmer";
   }
   function isUnknown(sw) { return !!(sw && sw.load === UNKNOWN_LOAD); }
@@ -672,14 +714,16 @@
       if (opts.length) groups.push(`<optgroup label="Outside">` + opts.join("") + `</optgroup>`);
     }
     const custom = `<input type="text" data-field="lightRoomOther" value="${esc(d.lightRoomOther || "")}" placeholder="Where the light is" autocomplete="off">`;
-    return `<div class="field-wrap" id="lightPlaceWrap"><div class="light-place-row">${fieldHead("Light is in", "lightPlace", "Where the light or fan or load actually is. It starts as the same room as the switch, so leave it when they match. Change it in one tap when this switch controls a light in another room or outside.")}<select data-field="lightPlace" id="lightPlace"><option value="same"${cur === "same" ? " selected" : ""}>${esc(sameLabel)}</option>${groups.join("")}<option value="Other"${cur === "Other" ? " selected" : ""}>Other…</option></select></div>${cur === "Other" ? custom : ""}</div>`;
+    return `<div class="field-wrap" id="lightPlaceWrap"><div class="light-place-row">${fieldHead("Light is in", "lightPlace", "Where the light or fan or load actually is. It starts as the same room as the switch, so leave it when they match. Change it in one tap when this switch controls a light in another room or outside.")}<select data-field="lightPlace" id="lightPlace"><option value="same"${cur === "same" ? " selected" : ""}>${esc(sameLabel)}</option>${groups.join("")}<option value="Other"${cur === "Other" ? " selected" : ""}>Other…</option><option value="${ADD_NEW}">+ Add new…</option></select></div>${cur === "Other" ? custom : ""}${addNewInputHtml("lightPlace", "New room or place")}</div>`;
   }
   function roomsForFloor(floor) {
-    if (floor === "Exterior") return EXTERIOR_ROOMS.slice();
+    const custom = customLists().rooms;
+    if (floor === "Exterior") return mergeCustom(EXTERIOR_ROOMS, custom, true);
     if (floor === "Basement") {
-      return INDOOR_ROOMS.filter((r) => r !== "Other").concat(["Main area", "Utility"]).sort((a, b) => a.localeCompare(b)).concat(["Other"]);
+      const base = INDOOR_ROOMS.filter((r) => r !== "Other").concat(["Main area", "Utility"]);
+      return mergeCustom(base, custom, true);
     }
-    return INDOOR_ROOMS.slice();
+    return mergeCustom(INDOOR_ROOMS, custom, true);
   }
   function isListedRoom(floor, name) { return roomsForFloor(floor).indexOf(name) !== -1; }
   function locPair(floor, room) {
@@ -923,7 +967,7 @@
     return html;
   }
   function loadTypeSelectHtml(d) {
-    const types = LOADS.filter((l) => l !== "Other").slice().sort((a, b) => a.localeCompare(b));
+    const types = allLoads();
     const opts = [];
     opts.push(`<option value="${UNKNOWN_LOAD}"${d.load === UNKNOWN_LOAD ? " selected" : ""}>${esc(UNKNOWN_LABEL)}</option>`);
     types.forEach((l) => {
@@ -931,8 +975,12 @@
       opts.push(`<option value="${esc(l)}"${on ? " selected" : ""}>${esc(l)}</option>`);
     });
     if (d.load === "Other") opts.push(`<option value="Other" selected>${esc((d.loadOther || "Other"))}</option>`);
+    else if (d.load && d.load !== UNKNOWN_LOAD && types.every((l) => l !== d.load)) {
+      opts.push(`<option value="${esc(d.load)}" selected>${esc(d.load)}</option>`);
+    }
+    opts.push(`<option value="${ADD_NEW}">+ Add new…</option>`);
     const placeholder = (!d.load || (state.loadTyping && !d.load)) ? `<option value="" selected>Type or choose a type…</option>` : `<option value="">Type or choose a type…</option>`;
-    return `<select id="loadType" aria-label="Light type">${placeholder}${opts.join("")}</select>`;
+    return `<select id="loadType" aria-label="Light type">${placeholder}${opts.join("")}</select>${addNewInputHtml("loads", "New type, e.g. Track lighting")}`;
   }
   function loadFieldHtml(home, d) {
     const val = loadDisplayValue(d);
@@ -975,9 +1023,9 @@
       applyLoadChoice(UNKNOWN_LOAD, "");
       return;
     }
-    const match = LOADS.find((l) => l.toLowerCase() === raw.toLowerCase());
+    const match = allLoads().find((l) => l.toLowerCase() === raw.toLowerCase()) || LOADS.find((l) => l.toLowerCase() === raw.toLowerCase());
     if (match) applyLoadChoice(match, "");
-    else applyLoadChoice("Other", raw);
+    else applyLoadChoice(addCustomItem("loads", raw), "");
   }
   function refreshLoadSuggest() {
     const home = homeOf();
@@ -1072,6 +1120,12 @@
     if (typeSel) typeSel.addEventListener("change", () => {
       const v = typeSel.value;
       if (!v) return;
+      if (v === ADD_NEW) {
+        state.addingList = "loads";
+        persist(); render();
+        return;
+      }
+      state.addingList = "";
       applyLoadChoice(v, v === "Other" ? (state.draft.loadOther || "") : "");
     });
   }
@@ -1649,7 +1703,12 @@
   }
   function selectField(label, name, values, current, hintId, hintText) {
     const opts = [["","Choose…"]].concat(values.map((v) => [v,v]));
-    return `<div class="field-wrap">${fieldHead(label, hintId, hintText)}<select data-field="${name}">` + opts.map(([v,l]) => `<option value="${esc(v)}" ${current===v?"selected":""}>${esc(l)}</option>`).join("") + `</select></div>`;
+    if (current && values.indexOf(current) === -1 && current !== "Other") opts.push([current, current]);
+    const addKind = name === "room" ? "rooms" : (name ? name : "");
+    const addOpt = addKind ? `<option value="${ADD_NEW}">+ Add new…</option>` : "";
+    const ph = name === "room" ? "New room name" : "New item";
+    const input = addKind ? addNewInputHtml(addKind, ph) : "";
+    return `<div class="field-wrap">${fieldHead(label, hintId, hintText)}<select data-field="${name}">` + opts.map(([v,l]) => `<option value="${esc(v)}" ${current===v?"selected":""}>${esc(l)}</option>`).join("") + addOpt + `</select>${input}</div>`;
   }
 
   function render() {
@@ -1956,6 +2015,7 @@
       else if (isVerifyFan(sw)) notes.push("Confirm whether this fan is AC or DC before installing.");
     }
     if (sw.load === "Exhaust fan") notes.push("Exhaust fan — on/off switch, not a fan speed switch.");
+    if (sw.load === "Fluorescent lights") notes.push("Fluorescent lights — LED retrofit or an on/off switch may be needed; not a dimmer by default.");
     if (isAlwaysOn(sw) && !sw.kindOverride) notes.push(ALWAYS_ON_NOTE);
     const n = fixtureCountOf(sw);
     if (n >= 6) notes.push("High fixture count (x" + n + ") — check wattage limit.");
@@ -2212,7 +2272,58 @@
     }
   }
   function flash(msg) { state.flash = msg; render(); setTimeout(() => { if (state.flash === msg) { state.flash = ""; render(); } }, 4000); }
+  function finishAddNew(kind, name) {
+    const n = String(name || "").replace(/\s+/g, " ").trim();
+    state.addingList = "";
+    if (!n) { persist(); render(); return; }
+    if (kind === "loads") {
+      const built = allLoads().find((l) => l.toLowerCase() === n.toLowerCase()) || LOADS.find((l) => l.toLowerCase() === n.toLowerCase());
+      applyLoadChoice(built || addCustomItem("loads", n), "");
+      return;
+    }
+    if (kind === "rooms") {
+      const room = addCustomItem("rooms", n);
+      state.draft.room = room;
+      state.draft.roomOther = "";
+      syncLightPlaceIfSame();
+      persist(); render();
+      return;
+    }
+    if (kind === "lightPlace") {
+      const room = addCustomItem("rooms", n);
+      const d = state.draft;
+      const floor = d.floor || "Main";
+      if (room === effectiveRoom(d) && floor === d.floor) applyLightPlace("same");
+      else applyLightPlace(floor + "|" + room);
+      persist(); render();
+      return;
+    }
+    if (kind === "locations") {
+      state.draft.location = addCustomItem("locations", n);
+      state.draft.locationOther = "";
+      persist(); render();
+      return;
+    }
+    persist(); render();
+  }
+  function bindAddListInput() {
+    const el = document.getElementById("addListInput");
+    if (!el) return;
+    const commit = () => {
+      if (!state.addingList) return;
+      finishAddNew(el.getAttribute("data-add-list"), el.value);
+    };
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } });
+    el.addEventListener("blur", () => {
+      setTimeout(() => {
+        if (document.activeElement === el) return;
+        if (state.addingList) commit();
+      }, 160);
+    });
+    setTimeout(() => { try { el.focus(); el.scrollIntoView({ block: "nearest" }); } catch (err) {} }, 0);
+  }
   function bindMain() {
+
     document.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => { state.tab = b.getAttribute("data-tab"); persist(); render(); }));
     const name = document.getElementById("homeName");
     if (name) name.addEventListener("input", () => { const h = homeOf(); h.name = name.value; setHome(h); });
@@ -2221,11 +2332,18 @@
       btn.addEventListener("click", () => onChip(field, btn.getAttribute("data-value")));
     });
     bindLoadInput();
+    bindAddListInput();
     document.querySelectorAll("select[data-field], input[data-field], textarea[data-field]").forEach((el) => {
       el.addEventListener("input", () => {
         const field = el.getAttribute("data-field");
         if (field === "loadQuery") return;
+        if (el.tagName === "SELECT" && el.value === ADD_NEW) {
+          state.addingList = field === "room" ? "rooms" : field;
+          persist(); render();
+          return;
+        }
         if (field === "lightPlace") {
+          state.addingList = "";
           applyLightPlace(el.value);
           persist();
           render();
